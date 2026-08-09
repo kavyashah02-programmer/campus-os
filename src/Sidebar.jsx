@@ -62,6 +62,22 @@ const Sidebar = ({ currentView, setCurrentView }) => {
             </button>
           );
         })}
+
+        {/* August AI WhatsApp Quick Link */}
+        <a 
+          href="https://wa.me/8738030604" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          title="Chat with August AI"
+          className="w-full flex items-center p-3 rounded-xl transition-all duration-200 group bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 mt-4"
+        >
+          <span className="text-xl flex items-center justify-center w-8 h-8 rounded-lg">
+            🤖
+          </span>
+          <span className="hidden lg:block ml-3 text-sm font-bold tracking-wide text-blue-400 group-hover:text-blue-300">
+            August AI
+          </span>
+        </a>
       </nav>
 
       {/* Footer Info */}

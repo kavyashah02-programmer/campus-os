@@ -1,166 +1,176 @@
 import React, { useState, useEffect } from 'react';
+import ReactApexChart from 'react-apexcharts';
 
-const RewardSystem = () => {
-  // 7 Categories × 3 Tiers = 21 Total Tasks. Overlapping progress engine ensures streaks never break when claiming lower tiers.
-  const initialTasks = [
-    // 1. Early Bird Track
-    { id: 1, groupId: 'wakeup', title: 'Early Bird I', desc: 'Wake up at 5:30 AM for 7 days', target: 7, progress: 0, reward: '1 Cheat Day + Fancy Coffee', icon: '🌅', tier: 'Bronze' },
-    { id: 2, groupId: 'wakeup', title: 'Early Bird II', desc: 'Wake up at 5:30 AM for 21 days', target: 21, progress: 0, reward: '1 Cheat Day + Sleep in extra', icon: '🌅', tier: 'Silver' },
-    { id: 3, groupId: 'wakeup', title: 'Early Bird III', desc: 'Wake up at 5:30 AM for 45 days', target: 45, progress: 0, reward: '2 Cheat Days + Buy new tech accessory', icon: '👑', tier: 'Gold' },
+const FitnessTracker = () => {
+  const getLocalDateStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  
+  const [fitnessDate, setFitnessDate] = useState(getLocalDateStr());
+  const [exercise, setExercise] = useState(0);
+  const [sleep, setSleep] = useState(0);
+  const [water, setWater] = useState(0);
+  const [coffee, setCoffee] = useState(0);  // Coffee state
+  const [shakes, setShakes] = useState(0);  // Shakes state
+  const [isSaved, setIsSaved] = useState(true); // Tracks unsaved changes
 
-    // 2. Gym Track
-    { id: 4, groupId: 'gym', title: 'Gym Rat I', desc: 'Hit the gym 10 days in a row', target: 10, progress: 0, reward: '1 Cheat Day + Thickshake', icon: '🏋️', tier: 'Bronze' },
-    { id: 5, groupId: 'gym', title: 'Gym Rat II', desc: 'Hit the gym 20 days in a row', target: 20, progress: 0, reward: '1 Cheat Day + Cheat Meal', icon: '💪', tier: 'Silver' },
-    { id: 6, groupId: 'gym', title: 'Gym Rat III', desc: 'Hit the gym 40 days in a row', target: 40, progress: 0, reward: '2 Cheat Days + Buy new gym gear', icon: '🏆', tier: 'Gold' },
-
-    // 3. Coding Track
-    { id: 7, groupId: 'code', title: 'Code Monkey I', desc: 'Code daily outside coursework for 10 days', target: 10, progress: 0, reward: '1 Cheat Day + 1 Hr TMKOC binge', icon: '💻', tier: 'Bronze' },
-    { id: 8, groupId: 'code', title: 'Code Monkey II', desc: 'Code daily outside coursework for 20 days', target: 20, progress: 0, reward: '1 Cheat Day + Premium dessert', icon: '🚀', tier: 'Silver' },
-    { id: 9, groupId: 'code', title: 'Code Monkey III', desc: 'Code daily outside coursework for 40 days', target: 40, progress: 0, reward: '2 Cheat Days + Full day off to relax', icon: '💻', tier: 'Gold' },
-
-    // 4. Wealth Builder Track (NEW)
-    { id: 10, groupId: 'wealth', title: 'Wealth Builder I', desc: 'Save ₹15 every day for 15 days', target: 15, progress: 0, reward: '1 Cheat Day + ₹225 to Premium Course/AI Fund', icon: '💰', tier: 'Bronze' },
-    { id: 11, groupId: 'wealth', title: 'Wealth Builder II', desc: 'Save ₹15 every day for 30 days', target: 30, progress: 0, reward: '1 Cheat Day + ₹450 to Premium Course/AI Fund', icon: '📈', tier: 'Silver' },
-    { id: 12, groupId: 'wealth', title: 'Wealth Builder III', desc: 'Save ₹15 every day for 60 days', target: 60, progress: 0, reward: '2 Cheat Days + Buy Premium Course / AI Subscription!', icon: '💎', tier: 'Gold' },
-
-    // 5. Academic Focus Track
-    { id: 13, groupId: 'study', title: 'Academic Focus I', desc: 'Solve 5 complex Math/Physics problems daily for 10 days', target: 10, progress: 0, reward: '1 Cheat Day + 2-hour Cricket Match', icon: '📐', tier: 'Bronze' },
-    { id: 14, groupId: 'study', title: 'Academic Focus II', desc: 'Solve 5 complex problems daily for 20 days', target: 20, progress: 0, reward: '1 Cheat Day + Evening out with friends', icon: '🔬', tier: 'Silver' },
-    { id: 15, groupId: 'study', title: 'Academic Focus III', desc: 'Solve 5 complex problems daily for 40 days', target: 40, progress: 0, reward: '2 Cheat Days + Weekend movie outing', icon: '🎓', tier: 'Gold' },
-
-    // 6. Hostel Cleanliness Track
-    { id: 16, groupId: 'clean', title: 'Hostel Cleanliness I', desc: 'Keep room clean & laundry done for 7 days', target: 7, progress: 0, reward: '1 Cheat Day', icon: '🧹', tier: 'Bronze' },
-    { id: 17, groupId: 'clean', title: 'Hostel Cleanliness II', desc: 'Keep room clean & laundry done for 21 days', target: 21, progress: 0, reward: '1 Cheat Day + Order Pizza', icon: '🧺', tier: 'Silver' },
-    { id: 18, groupId: 'clean', title: 'Hostel Cleanliness III', desc: 'Keep room clean & laundry done for 45 days', target: 45, progress: 0, reward: '2 Cheat Days + Bollywood Music night off', icon: '✨', tier: 'Gold' },
-
-    // 7. Discipline & Schedule Track
-    { id: 19, groupId: 'schedule', title: 'Discipline I', desc: 'Maintain 100% daily schedule blocks for 5 days', target: 5, progress: 0, reward: '1 Cheat Day', icon: '📅', tier: 'Bronze' },
-    { id: 20, groupId: 'schedule', title: 'Discipline II', desc: 'Maintain 100% daily schedule blocks for 15 days', target: 15, progress: 0, reward: '1 Cheat Day + Evening Cricket Tournament', icon: '⏱️', tier: 'Silver' },
-    { id: 21, groupId: 'schedule', title: 'Discipline III', desc: 'Maintain 100% daily schedule blocks for 30 days', target: 30, progress: 0, reward: '2 Cheat Days + Major Tech Upgrade Fund', icon: '🎯', tier: 'Gold' },
-  ];
-
-  // Using _v2 to ensure your browser updates to the new 21-task list automatically
-  const [rewardTasks, setRewardTasks] = useState(() => {
-    const saved = localStorage.getItem('react_rewards_v2');
-    return saved ? JSON.parse(saved) : initialTasks;
+  const [allData, setAllData] = useState(() => {
+    const saved = localStorage.getItem('react_fitness');
+    return saved ? JSON.parse(saved) : {};
   });
 
-  const [cheatDays, setCheatDays] = useState(() => {
-    return Number(localStorage.getItem('react_cheat_days')) || 0;
-  });
+  // Warn before closing browser tab if unsaved
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (!isSaved) { e.preventDefault(); e.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isSaved]);
 
   useEffect(() => {
-    localStorage.setItem('react_rewards_v2', JSON.stringify(rewardTasks));
-    localStorage.setItem('react_cheat_days', cheatDays.toString());
-  }, [rewardTasks, cheatDays]);
+    const dayData = allData[fitnessDate] || { exercise: 0, sleep: 0, water: 0, coffee: 0, shakes: 0 };
+    setExercise(dayData.exercise); 
+    setSleep(dayData.sleep); 
+    setWater(dayData.water); 
+    setCoffee(dayData.coffee || 0); 
+    setShakes(dayData.shakes || 0);
+    setIsSaved(true);
+  }, [fitnessDate, allData]);
 
-  // +1 Log updates ALL tiers in that group simultaneously
-  const updateProgress = (groupId, delta) => {
-    setRewardTasks(rewardTasks.map(task => {
-      if (task.groupId === groupId) {
-        return { ...task, progress: Math.max(0, Math.min(task.target, task.progress + delta)) };
-      }
-      return task;
-    }));
+  const handleDateChange = (newDate) => {
+    if (!isSaved && !window.confirm("You have unsaved fitness data for this date! Proceed without saving?")) return;
+    setFitnessDate(newDate);
   };
 
-  const claimReward = (id) => {
-    const task = rewardTasks.find(t => t.id === id);
-    let earnedCheats = task.tier === 'Gold' ? 2 : 1;
-    setCheatDays(prev => prev + earnedCheats);
-    
-    alert(`🎉 Target hit! You earned: ${task.reward}\n\nYou now have ${earnedCheats} new Cheat Day(s) to use whenever you lose a streak!`);
-    
-    // Resets ONLY this specific tier. Higher tiers keep their overlapping progress!
-    setRewardTasks(rewardTasks.map(t => t.id === id ? { ...t, progress: 0 } : t));
+  const handleSave = () => {
+    const newData = { ...allData, [fitnessDate]: { exercise, sleep, water, coffee, shakes } };
+    setAllData(newData);
+    localStorage.setItem('react_fitness', JSON.stringify(newData));
+    setIsSaved(true);
+    setTimeout(() => { setIsSaved(false); setIsSaved(true); }, 2000); // Visual ping
   };
 
-  const resetGroupStreak = (groupId) => {
-    if(cheatDays > 0) {
-      if(window.confirm(`You missed a day! Do you want to use 1 of your ${cheatDays} Cheat Days to keep your streak alive?`)) {
-        setCheatDays(prev => prev - 1);
-        return; // Streak saved!
-      }
-    }
-    if(window.confirm("No cheat days used. Streak broken. Resetting all tiers for this category to 0.")) {
-      setRewardTasks(rewardTasks.map(t => t.groupId === groupId ? { ...t, progress: 0 } : t));
-    }
+  const adjustCounter = (setter, current, amount) => { 
+    setter(Math.max(0, current + amount)); 
+    setIsSaved(false); 
   };
 
-  const getTierColor = (tier) => {
-    if (tier === 'Gold') return 'border-yellow-500 bg-yellow-900/20 text-yellow-400';
-    if (tier === 'Silver') return 'border-gray-400 bg-gray-700/20 text-gray-300';
-    return 'border-orange-700 bg-orange-900/20 text-orange-500'; // Bronze
+  // --- Monthly Analytics Graph (Only maps Exercise, Sleep, and Water) ---
+  const [year, month] = fitnessDate.split('-');
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const daysArray = Array.from({length: daysInMonth}, (_, i) => i + 1);
+  
+  const seriesExercise = []; const seriesSleep = []; const seriesWater = [];
+  daysArray.forEach(d => {
+    const dStr = `${year}-${month}-${String(d).padStart(2, '0')}`;
+    const logs = allData[dStr] || { exercise: 0, sleep: 0, water: 0 };
+    seriesExercise.push(logs.exercise);
+    seriesSleep.push(logs.sleep);
+    seriesWater.push(logs.water);
+  });
+
+  const chartOptions = {
+    chart: { type: 'line', toolbar: { show: false }, background: 'transparent' },
+    colors: ['#3b82f6', '#6366f1', '#0ea5e9'],
+    stroke: { curve: 'smooth', width: 2 },
+    xaxis: { categories: daysArray, labels: { style: { colors: '#6b7280' } } },
+    yaxis: [{ title: { text: "Minutes / Hrs", style: { color: '#6b7280' } }, labels: { style: { colors: '#6b7280' } } }],
+    theme: { mode: 'dark' }, legend: { position: 'top', labels: { colors: '#fff' } }
   };
+
+  const chartSeries = [
+    { name: 'Gym (mins)', data: seriesExercise },
+    { name: 'Sleep (hrs)', data: seriesSleep },
+    { name: 'Water (glasses)', data: seriesWater }
+  ];
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 h-full flex flex-col">
+    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 h-full flex flex-col">
       <header className="bg-[#121212] rounded-2xl border border-gray-800 p-5 shadow-lg flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-extrabold text-white tracking-tight">Gamified Reward System</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Build streaks to earn Cheat Days. Claiming Tier I keeps Tier II's streak alive!</p>
+          <h1 className="text-2xl font-extrabold text-white tracking-tight">Fitness & Wellness</h1>
         </div>
-        <div className="bg-red-900/20 border border-red-900/50 px-6 py-2 rounded-xl text-center">
-          <p className="text-xs text-red-400 font-bold uppercase tracking-wider mb-1">Cheat Days Available</p>
-          <p className="text-3xl font-black text-white">{cheatDays}</p>
+        <div>
+          <input type="date" value={fitnessDate} onChange={(e) => handleDateChange(e.target.value)} className="border border-gray-700 bg-black text-white rounded-xl px-4 py-2 text-sm font-semibold outline-none focus:border-blue-500 [color-scheme:dark]" />
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
-        {rewardTasks.map(task => {
-          const isComplete = task.progress === task.target;
-          const percentage = (task.progress / task.target) * 100;
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
+        
+        <div className="lg:col-span-1 space-y-6 overflow-y-auto custom-scrollbar pr-2 h-full">
+          {/* Activity & Sleep Section */}
+          <div className="bg-[#121212] rounded-2xl border border-gray-800 p-6 space-y-8 shadow-lg">
+            <h2 className="text-base font-bold text-white flex items-center gap-2 border-b border-gray-800 pb-3">
+              <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> Activity & Sleep
+            </h2>
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Exercise / Gym Time</label>
+                <span className="text-lg font-extrabold text-blue-500">{exercise} min</span>
+              </div>
+              <input type="range" min="0" max="180" step="15" value={exercise} onChange={(e) => {setExercise(Number(e.target.value)); setIsSaved(false);}} className="w-full accent-blue-500" />
+            </div>
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sleep Duration</label>
+                <span className="text-lg font-extrabold text-indigo-500">{sleep} hrs</span>
+              </div>
+              <input type="range" min="0" max="12" step="0.5" value={sleep} onChange={(e) => {setSleep(Number(e.target.value)); setIsSaved(false);}} className="w-full accent-indigo-500" />
+            </div>
+          </div>
 
-          return (
-            <div key={task.id} className={`p-5 rounded-2xl border transition-all ${isComplete ? 'bg-emerald-900/20 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-[#121212] border-gray-800'}`}>
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                
-                <div className="flex items-center gap-4 flex-1">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl border ${getTierColor(task.tier)}`}>
-                    {task.icon}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-white font-bold text-lg">{task.title}</h3>
-                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${getTierColor(task.tier)}`}>{task.tier}</span>
-                    </div>
-                    <p className="text-sm text-gray-400 mt-1">{task.desc}</p>
-                    <p className="text-xs font-bold text-emerald-400 mt-1">🎁 Reward: {task.reward}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-6 w-full md:w-auto">
-                  <div className="flex-1 md:w-48">
-                    <div className="flex justify-between text-xs font-bold mb-1">
-                      <span className="text-gray-400">Progress</span>
-                      <span className="text-white">{task.progress} / {task.target}</span>
-                    </div>
-                    <div className="w-full bg-black rounded-full h-2.5 border border-gray-700 overflow-hidden">
-                      <div className={`h-2.5 rounded-full transition-all duration-500 ${isComplete ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${percentage}%` }}></div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    {!isComplete ? (
-                      <>
-                        <button onClick={() => resetGroupStreak(task.groupId)} title="Reset / Use Cheat Day" className="w-8 h-8 rounded-lg bg-gray-800 text-gray-400 hover:bg-red-900/50 hover:text-red-400 flex items-center justify-center transition-colors">↺</button>
-                        <button onClick={() => updateProgress(task.groupId, 1)} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors">+1 Log</button>
-                      </>
-                    ) : (
-                      <button onClick={() => claimReward(task.id)} className="px-6 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-black text-sm shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-all animate-bounce">
-                        Claim Reward!
-                      </button>
-                    )}
-                  </div>
-                </div>
-
+          {/* Drinks & Fluids Section */}
+          <div className="bg-[#121212] rounded-2xl border border-gray-800 p-6 space-y-4 shadow-lg">
+            <h2 className="text-base font-bold text-white flex items-center gap-2 border-b border-gray-800 pb-3">
+              <svg className="w-5 h-5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg> Drinks & Fluids
+            </h2>
+            
+            {/* Water */}
+            <div className="flex items-center justify-between p-3 bg-sky-900/20 rounded-xl border border-sky-900/30">
+              <div className="flex items-center gap-3"><span className="text-xl">💧</span><span className="font-bold text-sm text-sky-400">Water</span></div>
+              <div className="flex items-center bg-black rounded-xl border border-gray-700">
+                <button onClick={() => adjustCounter(setWater, water, -1)} className="w-10 h-10 font-bold text-gray-400">-</button>
+                <span className="w-8 text-center font-extrabold text-sm text-white">{water}</span>
+                <button onClick={() => adjustCounter(setWater, water, 1)} className="w-10 h-10 font-bold text-sky-500">+</button>
               </div>
             </div>
-          );
-        })}
+
+            {/* Coffee */}
+            <div className="flex items-center justify-between p-3 bg-amber-900/20 rounded-xl border border-amber-900/30">
+              <div className="flex items-center gap-3"><span className="text-xl">☕</span><span className="font-bold text-sm text-amber-400">Coffee</span></div>
+              <div className="flex items-center bg-black rounded-xl border border-gray-700">
+                <button onClick={() => adjustCounter(setCoffee, coffee, -1)} className="w-10 h-10 font-bold text-gray-400">-</button>
+                <span className="w-8 text-center font-extrabold text-sm text-white">{coffee}</span>
+                <button onClick={() => adjustCounter(setCoffee, coffee, 1)} className="w-10 h-10 font-bold text-amber-500">+</button>
+              </div>
+            </div>
+
+            {/* Fruit Shakes */}
+            <div className="flex items-center justify-between p-3 bg-rose-900/20 rounded-xl border border-rose-900/30">
+              <div className="flex items-center gap-3"><span className="text-xl">🥤</span><span className="font-bold text-sm text-rose-400">Fruit Shakes</span></div>
+              <div className="flex items-center bg-black rounded-xl border border-gray-700">
+                <button onClick={() => adjustCounter(setShakes, shakes, -1)} className="w-10 h-10 font-bold text-gray-400">-</button>
+                <span className="w-8 text-center font-extrabold text-sm text-white">{shakes}</span>
+                <button onClick={() => adjustCounter(setShakes, shakes, 1)} className="w-10 h-10 font-bold text-rose-500">+</button>
+              </div>
+            </div>
+          </div>
+
+          <button onClick={handleSave} className={`w-full font-bold py-4 rounded-2xl shadow-md transition-all duration-300 flex items-center justify-center gap-2 ${isSaved ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white animate-pulse'}`}>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            {isSaved ? "Saved Successfully!" : "Save Today's Metrics"}
+          </button>
+        </div>
+
+        <div className="lg:col-span-2 bg-[#121212] rounded-2xl border border-gray-800 shadow-lg p-6 flex flex-col h-full overflow-hidden">
+          <h2 className="text-base font-bold text-white mb-4">Monthly Analytics ({new Date(year, month-1).toLocaleDateString('en-US',{month:'long'})})</h2>
+          <div className="flex-1 min-h-[300px]">
+            <ReactApexChart options={chartOptions} series={chartSeries} type="line" height="100%" />
+          </div>
+        </div>
+
       </div>
     </div>
   );
 };
 
-export default RewardSystem;
+export default FitnessTracker;
