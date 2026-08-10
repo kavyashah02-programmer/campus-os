@@ -26,11 +26,15 @@ const LaundryTracker = () => {
     }));
   };
 
-  // NEW FUNCTION: Allows editing the base price of an item
   const updatePrice = (id, newBasePrice) => {
     setItems(items.map(item => 
       item.id === id ? { ...item, price: newBasePrice >= 0 ? newBasePrice : 0 } : item
     ));
+  };
+
+  // NEW FUNCTION: Deletes an item from the list entirely
+  const deleteItem = (id) => {
+    setItems(items.filter(item => item.id !== id));
   };
 
   const addNewItem = (e) => {
@@ -73,10 +77,9 @@ const LaundryTracker = () => {
 
       <div className="flex-1 overflow-y-auto pr-2 space-y-3 mb-4 custom-scrollbar">
         {items.map((item) => (
-          <div key={item.id} className="flex items-center justify-between bg-[#1a1a1a] p-3 rounded-lg border border-gray-700">
+          <div key={item.id} className="flex items-center justify-between bg-[#1a1a1a] p-3 rounded-lg border border-gray-700 group">
             <div>
               <p className="text-white text-base font-semibold">{item.name}</p>
-              {/* EDITABLE PRICE INPUT */}
               <div className="flex items-center space-x-1 mt-1">
                 <span className="text-sm text-gray-400">₹</span>
                 <input 
@@ -89,10 +92,24 @@ const LaundryTracker = () => {
               </div>
             </div>
             
-            <div className="flex items-center space-x-3 bg-black rounded-md border border-gray-600 p-1">
-              <button onClick={() => updateCount(item.id, -1)} className="w-8 h-8 flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-800 rounded font-bold text-lg transition-colors">-</button>
-              <span className="text-white w-6 text-center text-base font-bold">{item.count}</span>
-              <button onClick={() => updateCount(item.id, 1)} className="w-8 h-8 flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-800 rounded font-bold text-lg transition-colors">+</button>
+            <div className="flex items-center space-x-4">
+              {/* Quantity Controls */}
+              <div className="flex items-center space-x-3 bg-black rounded-md border border-gray-600 p-1">
+                <button onClick={() => updateCount(item.id, -1)} className="w-8 h-8 flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-800 rounded font-bold text-lg transition-colors">-</button>
+                <span className="text-white w-6 text-center text-base font-bold">{item.count}</span>
+                <button onClick={() => updateCount(item.id, 1)} className="w-8 h-8 flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-800 rounded font-bold text-lg transition-colors">+</button>
+              </div>
+
+              {/* NEW: Delete Button */}
+              <button 
+                onClick={() => deleteItem(item.id)} 
+                title="Remove item"
+                className="text-gray-500 hover:text-red-500 transition-colors p-1"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
             </div>
           </div>
         ))}
