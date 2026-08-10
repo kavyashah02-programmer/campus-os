@@ -6,48 +6,48 @@ const RewardSystem = () => {
     {
       id: 'wakeup', name: 'Early Bird', icon: '🌅', desc: 'Wake up at 5:30 AM',
       tiers: [
-        { id: 1, name: 'Tier I', target: 7, reward: '1 Cheat Day + Fancy Coffee', cheats: 1, level: 'Bronze' },
-        { id: 2, name: 'Tier II', target: 21, reward: '1 Cheat Day + Sleep in extra', cheats: 1, level: 'Silver' },
-        { id: 3, name: 'Tier III', target: 45, reward: '2 Cheat Days + Buy new tech accessory', cheats: 2, level: 'Gold' }
+        { id: 1, name: 'Tier I', target: 7, reward: '1 Cheat Day ', cheats: 1, level: 'Bronze' },
+        { id: 2, name: 'Tier II', target: 21, reward: '1 Cheat Day + Fancy Coffee', cheats: 1, level: 'Silver' },
+        { id: 3, name: 'Tier III', target: 45, reward: '2 Cheat Days + Sleep in extra', cheats: 2, level: 'Gold' }
       ]
     },
     {
       id: 'gym', name: 'Gym Rat', icon: '🏋️', desc: 'Hit the gym consistently',
       tiers: [
-        { id: 4, name: 'Tier I', target: 10, reward: '1 Cheat Day + Thickshake', cheats: 1, level: 'Bronze' },
-        { id: 5, name: 'Tier II', target: 20, reward: '1 Cheat Day + Cheat Meal', cheats: 1, level: 'Silver' },
-        { id: 6, name: 'Tier III', target: 40, reward: '2 Cheat Days + Buy new gym gear', cheats: 2, level: 'Gold' }
+        { id: 4, name: 'Tier I', target: 10, reward: '1 Cheat Day ', cheats: 1, level: 'Bronze' },
+        { id: 5, name: 'Tier II', target: 20, reward: '1 Cheat Day + Thickshake', cheats: 1, level: 'Silver' },
+        { id: 6, name: 'Tier III', target: 40, reward: '2 Cheat Days + Cheat Meal', cheats: 2, level: 'Gold' }
       ]
     },
     {
-      id: 'code', name: 'Code Monkey', icon: '💻', desc: 'Code daily outside coursework',
+      id: 'code', name: 'Code Monkey', icon: '💻', desc: 'Code daily outside coursework for atleast an hour',
       tiers: [
-        { id: 7, name: 'Tier I', target: 10, reward: '1 Cheat Day + 1 Hr TMKOC binge', cheats: 1, level: 'Bronze' },
-        { id: 8, name: 'Tier II', target: 20, reward: '1 Cheat Day + Premium dessert', cheats: 1, level: 'Silver' },
-        { id: 9, name: 'Tier III', target: 40, reward: '2 Cheat Days + Buy mechanical keyboard', cheats: 2, level: 'Gold' }
+        { id: 7, name: 'Tier I', target: 10, reward: '1 Cheat Day ', cheats: 1, level: 'Bronze' },
+        { id: 8, name: 'Tier II', target: 20, reward: '1 Cheat Day + 1 Hr binge watch your show/anime', cheats: 1, level: 'Silver' },
+        { id: 9, name: 'Tier III', target: 40, reward: '2 Cheat Days + Premium dessert', cheats: 2, level: 'Gold' }
       ]
     },
     {
       id: 'finance', name: 'Financial Discipline', icon: '📊', desc: 'Log expenses and track budget',
       tiers: [
-        { id: 10, name: 'Tier I', target: 15, reward: '1 Cheat Day + Order snacks', cheats: 1, level: 'Bronze' },
+        { id: 10, name: 'Tier I', target: 15, reward: '1 Cheat Day', cheats: 1, level: 'Bronze' },
         { id: 11, name: 'Tier II', target: 30, reward: '1 Cheat Day + Movie outing', cheats: 1, level: 'Silver' },
-        { id: 12, name: 'Tier III', target: 60, reward: '2 Cheat Days + High-end Restaurant Meal', cheats: 2, level: 'Gold' }
+        { id: 12, name: 'Tier III', target: 60, reward: '2 Cheat Days + Buy yourself something special!', cheats: 2, level: 'Gold' }
       ]
     },
     {
       id: 'wealth', name: 'Wealth Builder', icon: '💰', desc: 'Save ₹15 every single day',
       tiers: [
-        { id: 13, name: 'Tier I', target: 15, reward: '1 Cheat Day + ₹225 to Premium AI Fund', cheats: 1, level: 'Bronze' },
-        { id: 14, name: 'Tier II', target: 30, reward: '1 Cheat Day + ₹450 to Premium AI Fund', cheats: 1, level: 'Silver' },
-        { id: 15, name: 'Tier III', target: 60, reward: '2 Cheat Days + Buy Premium Course / AI Subscription!', cheats: 2, level: 'Gold' }
+        { id: 13, name: 'Tier I', target: 15, reward: '1 Cheat Day ', cheats: 1, level: 'Bronze' },
+        { id: 14, name: 'Tier II', target: 30, reward: '1 Cheat Day + ₹450 to Premium AI Fund/Software/Courses', cheats: 1, level: 'Silver' },
+        { id: 15, name: 'Tier III', target: 60, reward: '2 Cheat Days + Buy Premium Course / AI Subscription! or Buy a Tech Item', cheats: 2, level: 'Gold' }
       ]
     },
     {
-      id: 'study', name: 'Academic Focus', icon: '📐', desc: 'Solve 5 complex problems daily',
+      id: 'study', name: 'Academic Focus', icon: '📐', desc: 'Solve 20 complex problems daily',
       tiers: [
-        { id: 16, name: 'Tier I', target: 10, reward: '1 Cheat Day + 2-hour Cricket Match', cheats: 1, level: 'Bronze' },
-        { id: 17, name: 'Tier II', target: 20, reward: '1 Cheat Day + Evening out with friends', cheats: 1, level: 'Silver' },
+        { id: 16, name: 'Tier I', target: 10, reward: '1 Cheat Day', cheats: 1, level: 'Bronze' },
+        { id: 17, name: 'Tier II', target: 20, reward: '1 Cheat Day + 2-hour Cricket/Football Match', cheats: 1, level: 'Silver' },
         { id: 18, name: 'Tier III', target: 40, reward: '2 Cheat Days + Weekend movie outing', cheats: 2, level: 'Gold' }
       ]
     },
@@ -55,8 +55,8 @@ const RewardSystem = () => {
       id: 'schedule', name: 'Schedule Adherence', icon: '📅', desc: 'Maintain 100% daily time-blocks',
       tiers: [
         { id: 19, name: 'Tier I', target: 5, reward: '1 Cheat Day', cheats: 1, level: 'Bronze' },
-        { id: 20, name: 'Tier II', target: 15, reward: '1 Cheat Day + Evening Cricket Tournament', cheats: 1, level: 'Silver' },
-        { id: 21, name: 'Tier III', target: 30, reward: '2 Cheat Days + Major Tech Upgrade Fund', cheats: 2, level: 'Gold' }
+        { id: 20, name: 'Tier II', target: 15, reward: '1 Cheat Day + Go for an outing with friends', cheats: 1, level: 'Silver' },
+        { id: 21, name: 'Tier III', target: 30, reward: '2 Cheat Days + High end restaurant meal', cheats: 2, level: 'Gold' }
       ]
     },
     // --- GOLD ONLY TASKS ---
