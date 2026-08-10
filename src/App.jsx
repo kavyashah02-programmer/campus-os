@@ -18,6 +18,7 @@ import FinanceTracker from './FinanceTracker';
 import RewardSystem from './RewardSystem';
 import Library from './Library';
 import AnimalDonation from './AnimalDonation';
+import MotivationalQuote from './MotivationalQuote'; // <-- Imported here
 
 function App() {
   // --- FIREBASE AUTH STATE ---
@@ -158,7 +159,6 @@ function App() {
       }
       setEmail(''); setPassword('');
     } catch (err) {
-      // Clean up Firebase error messages
       setAuthError(err.message.replace('Firebase: ', '').replace('(auth/', '').replace(').', ''));
     }
   };
@@ -249,7 +249,6 @@ function App() {
                 <p className="text-gray-400 mt-1">Keep going. You're building something great.</p>
               </div>
               <div className="flex items-center gap-4">
-                {/* NEW: Logout Button & User Email */}
                 <div className="flex flex-col items-end">
                   <span className="text-xs text-gray-500 font-medium">{user.email}</span>
                   <button onClick={handleLogout} className="text-sm font-bold text-red-400 hover:text-red-300 transition-colors">Log Out</button>
@@ -261,6 +260,11 @@ function App() {
               </div>
             </header>
             
+            {/* --- NEW MOTIVATIONAL QUOTE WIDGET --- */}
+            <div className="w-full">
+              <MotivationalQuote />
+            </div>
+
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
               <div className="col-span-1 xl:col-span-2 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg">
                  <h3 className="text-gray-300 font-semibold text-sm uppercase tracking-wider mb-2">Weekly Productivity (Completion %)</h3>
