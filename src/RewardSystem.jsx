@@ -61,15 +61,15 @@ const RewardSystem = () => {
     },
     // --- GOLD ONLY TASKS ---
     {
-      id: 'prep', name: 'Exam Prep Sprint', icon: '🎯', desc: 'Complete all syllabus before exam',
+      id: 'prep', name: 'Exam Prep Sprint', icon: '🎯', desc: 'Complete all syllabus 1 week before the exam',
       tiers: [{ id: 22, name: 'Gold Tier', target: 1, reward: 'Massive 4-hour Cricket Match & Hangout', cheats: 0, level: 'Gold' }]
     },
     {
-      id: 'master', name: 'Master Builder', icon: '🏗️', desc: 'Finish building a complete Web App',
+      id: 'master', name: 'Master Builder', icon: '🏗️', desc: 'Finish building a complete Web App/ Gam Dev/ App Dev',
       tiers: [{ id: 23, name: 'Gold Tier', target: 1, reward: 'Showcase Web App & Take 2-day coding break', cheats: 0, level: 'Gold' }]
     },
     {
-      id: 'excellence', name: 'Academic Excellence', icon: '🎓', desc: 'Maintain > 8 CGPA for semester',
+      id: 'excellence', name: 'Academic Excellence', icon: '🎓', desc: 'Maintain > 8.5 CGPA for semester',
       tiers: [{ id: 24, name: 'Gold Tier', target: 1, reward: 'Major tech upgrade or full weekend trip', cheats: 0, level: 'Gold' }]
     },
     {

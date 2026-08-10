@@ -33,7 +33,7 @@ const AnimalDonation = () => {
   ];
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-500 h-full flex flex-col pb-10">
+    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 h-full flex flex-col pb-10">
       
       {/* --- HEADER --- */}
       <header className="bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex items-center justify-between">
@@ -47,28 +47,67 @@ const AnimalDonation = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         
-        {/* --- LEFT COLUMN: Persuasive Message --- */}
-        <div className="bg-[#121212] rounded-2xl border border-gray-800 p-8 shadow-lg flex flex-col relative overflow-hidden h-fit">
-          <div className="absolute top-0 right-0 -mr-10 -mt-10 opacity-5">
-            <svg className="w-64 h-64 text-rose-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-          </div>
+        {/* --- LEFT COLUMN --- */}
+        <div className="flex flex-col space-y-6">
           
-          <h2 className="text-3xl font-black text-white mb-6 leading-tight z-10">
-            They cannot ask for help.<br />
-            <span className="text-rose-500">But we can be their voice.</span>
-          </h2>
-          
-          <div className="space-y-4 text-gray-300 leading-relaxed z-10">
-            <p>
-              Every single day, thousands of stray and abandoned animals struggle to survive on the streets. They face starvation, severe weather, untreated injuries, and cruelty. They have no one to turn to—except us.
-            </p>
-            <p>
-              Your contribution, no matter how small, has a direct and immediate impact. It buys nutritious food for starving puppies, funds emergency surgeries for injured animals, and provides safe, warm shelters for those left out in the cold.
-            </p>
-            <p className="font-bold text-white text-lg mt-4 border-l-4 border-rose-500 pl-4">
-              By choosing to donate today, you aren't just giving money. You are giving a second chance at life, love, and happiness to a furry friend who truly needs it.
-            </p>
+          {/* Persuasive Message */}
+          <div className="bg-[#121212] rounded-2xl border border-gray-800 p-8 shadow-lg flex flex-col relative overflow-hidden h-fit">
+            <div className="absolute top-0 right-0 -mr-10 -mt-10 opacity-5">
+              <svg className="w-64 h-64 text-rose-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            </div>
+            
+            <h2 className="text-3xl font-black text-white mb-6 leading-tight z-10">
+              They cannot ask for help.<br />
+              <span className="text-rose-500">But we can be their voice.</span>
+            </h2>
+            
+            <div className="space-y-4 text-gray-300 leading-relaxed z-10">
+              <p>
+                Every single day, thousands of stray and abandoned animals struggle to survive on the streets. They face starvation, severe weather, untreated injuries, and cruelty. They have no one to turn to—except us.
+              </p>
+              <p>
+                Your contribution, no matter how small, has a direct and immediate impact. It buys nutritious food for starving puppies, funds emergency surgeries for injured animals, and provides safe, warm shelters for those left out in the cold.
+              </p>
+              <p className="font-bold text-white text-lg mt-4 border-l-4 border-rose-500 pl-4">
+                By choosing to donate today, you aren't just giving money. You are giving a second chance at life, love, and happiness to a furry friend who truly needs it.
+              </p>
+            </div>
           </div>
+
+          {/* CTA & SIGNATURE */}
+          <div className="bg-[#1a1a1a] rounded-3xl border border-gray-800 shadow-2xl p-8 md:p-12 text-center relative overflow-hidden h-fit">
+            
+            {/* Decorative background glow */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-32 bg-rose-500/10 blur-[100px] rounded-full pointer-events-none"></div>
+
+            {/* Improved Large Donation Message */}
+            <h1 className="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-rose-600 leading-tight mb-8">
+              If you found this Web App helpful, please consider making a generous donation to support animal welfare.
+            </h1>
+
+            {/* Divider */}
+            <div className="w-full h-px bg-gradient-to-r from-transparent via-gray-700 to-transparent my-8"></div>
+
+            {/* Improved Developer Signature */}
+            <div className="text-gray-400 text-sm md:text-base leading-relaxed bg-black/40 p-6 rounded-2xl border border-gray-800/50 inline-block w-full max-w-lg mx-auto">
+              <p className="mb-1">
+                Developed by <span className="font-bold text-gray-200">Kavya Shah</span>,
+              </p>
+              <p className="mb-4">
+                a student at BITS Pilani, Hyderabad Campus.
+              </p>
+              <p className="text-sm">
+                For suggestions, feedback, or reviews, please contact me at:<br />
+                <a 
+                  href="mailto:craftednovax9826@gmail.com" 
+                  className="text-blue-400 hover:text-blue-300 font-semibold tracking-wide transition-colors mt-2 inline-block"
+                >
+                  craftednovax9826@gmail.com
+                </a>
+              </p>
+            </div>
+          </div>
+
         </div>
 
         {/* --- RIGHT COLUMN: Guide & Link --- */}
