@@ -13,6 +13,7 @@ const DailyPlanner = () => {
   const [color, setColor] = useState('#6366f1'); 
   const [thingsToBring, setThingsToBring] = useState('');
   const [location, setLocation] = useState('');
+  const [description, setDescription] = useState(''); // NEW DESCRIPTION STATE
 
   const [blocks, setBlocks] = useState(() => {
     const saved = localStorage.getItem('react_daily_planner');
@@ -63,7 +64,7 @@ const DailyPlanner = () => {
         if (b.id === editingId) {
           const repeatChanged = b.repeat !== repeat;
           return { 
-            ...b, title, date, startTime, endTime, repeat, color, thingsToBring, location,
+            ...b, title, date, startTime, endTime, repeat, color, thingsToBring, location, description,
             excludedDates: repeatChanged ? [] : (b.excludedDates || [])
           };
         }
@@ -72,12 +73,12 @@ const DailyPlanner = () => {
       setEditingId(null);
     } else {
       const blockData = { 
-        id: Date.now(), title, date, startTime, endTime, repeat, color, thingsToBring, location,
+        id: Date.now(), title, date, startTime, endTime, repeat, color, thingsToBring, location, description,
         excludedDates: [] 
       };
       setBlocks([...blocks, blockData]);
     }
-    setTitle(''); setStartTime(''); setEndTime(''); setThingsToBring(''); setLocation(''); setRepeat('Once');
+    setTitle(''); setStartTime(''); setEndTime(''); setThingsToBring(''); setLocation(''); setRepeat('Once'); setDescription('');
   };
 
   const handleEdit = (id) => {
@@ -85,7 +86,7 @@ const DailyPlanner = () => {
     if (!block) return;
     setEditingId(block.id); setTitle(block.title); setDate(block.date); setStartTime(block.startTime); 
     setEndTime(block.endTime); setRepeat(block.repeat || 'Once'); setColor(block.color); 
-    setThingsToBring(block.thingsToBring || ''); setLocation(block.location || '');
+    setThingsToBring(block.thingsToBring || ''); setLocation(block.location || ''); setDescription(block.description || '');
     
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -108,7 +109,7 @@ const DailyPlanner = () => {
   };
 
   const cancelEdit = () => {
-    setEditingId(null); setTitle(''); setStartTime(''); setEndTime(''); setThingsToBring(''); setLocation('');
+    setEditingId(null); setTitle(''); setStartTime(''); setEndTime(''); setThingsToBring(''); setLocation(''); setDescription('');
   };
 
   const exportPDF = () => window.print();
@@ -244,6 +245,17 @@ const DailyPlanner = () => {
               <label className="block text-xs text-gray-500 font-semibold mb-1 uppercase tracking-wider">Things to Bring</label>
               <input type="text" placeholder="e.g., Lab coat, Calculator" value={thingsToBring} onChange={(e) => setThingsToBring(e.target.value)} className="w-full bg-black border border-gray-700 text-white px-4 py-2.5 rounded-lg focus:outline-none focus:border-indigo-500 placeholder-gray-600" />
             </div>
+            {/* NEW DESCRIPTION FIELD */}
+            <div>
+              <label className="block text-xs text-gray-500 font-semibold mb-1 uppercase tracking-wider">Description</label>
+              <textarea 
+                placeholder="e.g., Read chapter 4 before class..." 
+                value={description} 
+                onChange={(e) => setDescription(e.target.value)} 
+                className="w-full bg-black border border-gray-700 text-white px-4 py-2.5 rounded-lg focus:outline-none focus:border-indigo-500 placeholder-gray-600 resize-none h-20 custom-scrollbar"
+              />
+            </div>
+            
             <div className="pt-4 flex gap-2">
               <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-lg">{editingId ? 'Update Block' : 'Save to Schedule'}</button>
               {editingId && <button type="button" onClick={cancelEdit} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg transition-colors">Cancel</button>}
@@ -300,6 +312,7 @@ const DailyPlanner = () => {
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {block.location && <span className="text-[9px] bg-black/40 text-white/90 px-1.5 py-0.5 rounded border border-white/20 truncate">📍 {block.location}</span>}
                       {block.thingsToBring && <span className="text-[9px] bg-black/40 text-white/90 px-1.5 py-0.5 rounded border border-white/20 truncate">🎒 {block.thingsToBring}</span>}
+                      {block.description && <span className="text-[9px] bg-black/40 text-white/90 px-1.5 py-0.5 rounded border border-white/20 truncate">📝 {block.description}</span>}
                     </div>
                   </div>
                 ))}
@@ -328,7 +341,7 @@ const DailyPlanner = () => {
                       {dayBlocks.map((block) => (
                         <div 
                           key={block.id} 
-                          title={`${block.title}\nLeft-click: Delete\nRight-click: Edit`}
+                          title={`${block.title}\n${block.description ? block.description + '\n' : ''}Left-click: Delete\nRight-click: Edit`}
                           onClick={(e) => { e.stopPropagation(); handleDelete(block.id, dayStr); }}
                           onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); handleEdit(block.id); }}
                           className="absolute left-1 right-1 rounded p-1.5 shadow-sm overflow-hidden flex flex-col justify-start cursor-pointer hover:brightness-110 hover:z-20 transition-all border border-white/10" 
@@ -372,13 +385,16 @@ const DailyPlanner = () => {
                 <tbody>
                   {sortedPrintBlocksDaily.map(block => (
                     <tr key={block.id} className="border-b border-gray-300">
-                      <td className="py-4 px-4 font-bold text-gray-800 whitespace-nowrap">{block.startTime} - {block.endTime}</td>
-                      <td className="py-4 px-4 font-bold text-black text-lg">
-                        <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: block.color }}></span>
-                        {block.title}
+                      <td className="py-4 px-4 font-bold text-gray-800 whitespace-nowrap align-top">{block.startTime} - {block.endTime}</td>
+                      <td className="py-4 px-4 align-top">
+                        <div className="font-bold text-black text-lg flex items-center">
+                          <span className="inline-block w-3 h-3 rounded-full mr-2 shrink-0" style={{ backgroundColor: block.color }}></span>
+                          {block.title}
+                        </div>
+                        {block.description && <div className="text-sm text-gray-600 mt-1 ml-5 font-normal">{block.description}</div>}
                       </td>
-                      <td className="py-4 px-4 text-gray-600 font-medium">{block.location || '-'}</td>
-                      <td className="py-4 px-4 text-gray-600">{block.thingsToBring || '-'}</td>
+                      <td className="py-4 px-4 text-gray-600 font-medium align-top">{block.location || '-'}</td>
+                      <td className="py-4 px-4 text-gray-600 align-top">{block.thingsToBring || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -399,9 +415,15 @@ const DailyPlanner = () => {
                     <tbody>
                       {dayBlocks.map(block => (
                         <tr key={block.id} className="border-b border-gray-200">
-                          <td className="py-2 px-2 font-bold text-gray-800 w-1/5 whitespace-nowrap">{block.startTime} - {block.endTime}</td>
-                          <td className="py-2 px-2 font-bold text-black"><span className="inline-block w-2 h-2 rounded-full mr-2" style={{ backgroundColor: block.color }}></span>{block.title}</td>
-                          <td className="py-2 px-2 text-gray-600 text-sm">{block.location || '-'}</td>
+                          <td className="py-2 px-2 font-bold text-gray-800 w-1/5 whitespace-nowrap align-top">{block.startTime} - {block.endTime}</td>
+                          <td className="py-2 px-2 align-top">
+                            <div className="font-bold text-black flex items-center">
+                              <span className="inline-block w-2 h-2 rounded-full mr-2 shrink-0" style={{ backgroundColor: block.color }}></span>
+                              {block.title}
+                            </div>
+                            {block.description && <div className="text-xs text-gray-500 ml-4 mt-0.5">{block.description}</div>}
+                          </td>
+                          <td className="py-2 px-2 text-gray-600 text-sm align-top">{block.location || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
