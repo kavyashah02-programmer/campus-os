@@ -67,7 +67,7 @@ const HabitHeatmap = ({ habitLogs = {} }) => {
   return (
     <div className="bg-[#121212] rounded-xl p-6 shadow-lg border border-gray-800 w-full">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-gray-200 font-semibold text-lg">Habit Completion Heatmap</h3>
+        <h3 className="text-gray-200 font-semibold text-lg">Habit Completion Heatmap (Habit Tracker)</h3>
         <span className="text-xs text-gray-500">Last 12 Weeks</span>
       </div>
       <ReactApexChart options={options} series={series} type="heatmap" height={250} />

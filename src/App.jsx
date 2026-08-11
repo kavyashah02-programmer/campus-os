@@ -267,7 +267,7 @@ function App() {
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
               <div className="col-span-1 xl:col-span-2 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg">
-                 <h3 className="text-gray-300 font-semibold text-sm uppercase tracking-wider mb-2">Weekly Productivity (Completion %)</h3>
+                 <h3 className="text-gray-300 font-semibold text-sm uppercase tracking-wider mb-2">Weekly Productivity Completion % (Habit Tracker) </h3>
                  <ReactApexChart options={overviewOptions} series={overviewSeries} type="area" height={160} />
               </div>
 
@@ -275,7 +275,7 @@ function App() {
                 <div className={`rounded-xl p-6 border shadow-lg flex flex-col justify-center items-center text-center transition-colors duration-500 ${progressPercentage > 75 ? 'bg-emerald-900/20 border-emerald-900/50' : 'bg-[#121212] border-gray-800'}`}>
                    <h3 className={`${progressPercentage > 75 ? 'text-emerald-500' : 'text-gray-500'} font-semibold text-sm uppercase tracking-wider mb-2`}>Current Streak</h3>
                    <p className="text-5xl font-bold text-white flex items-center gap-2">{progressPercentage > 75 ? '🔥' : '🧊'} {currentStreak}<span className={`text-lg font-normal mt-3 ${progressPercentage > 75 ? 'text-emerald-400' : 'text-gray-600'}`}>days</span></p>
-                   <p className="text-xs text-gray-500 mt-2 text-center">{progressPercentage}% / 75% required</p>
+                   <p className="text-xs text-gray-500 mt-2 text-center">{progressPercentage}% / 75% required </p>
                 </div>
               </div>
             </div>
