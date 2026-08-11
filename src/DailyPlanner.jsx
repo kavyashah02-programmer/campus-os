@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 const DailyPlanner = () => {
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [viewMode, setViewMode] = useState('daily'); // 'daily', 'weekly', or 'list'
+  const [viewMode, setViewMode] = useState('daily'); 
   
   const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState('');
@@ -91,26 +91,20 @@ const DailyPlanner = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Improved Delete Function to handle List View
-  const handleDelete = (id, targetDate, isFullSeries = false) => {
-    const message = isFullSeries ? `Delete this ENTIRE series of scheduled blocks?` : `Delete this schedule block for ${targetDate} only?`;
-    if (window.confirm(message)) {
-      if (isFullSeries) {
-        setBlocks(blocks.filter(b => b.id !== id));
-      } else {
-        setBlocks(blocks.map(b => {
-          if (b.id === id) {
-            const excluded = b.excludedDates || [];
-            return { ...b, excludedDates: [...excluded, targetDate] };
-          }
-          return b;
-        }).filter(b => {
-          if (b.id === id && (b.repeat === 'Once' || !b.repeat) && b.date === targetDate) {
-            return false;
-          }
-          return true;
-        }));
-      }
+  const handleDelete = (id, targetDate) => {
+    if (window.confirm(`Delete this schedule block for ${targetDate} only?`)) {
+      setBlocks(blocks.map(b => {
+        if (b.id === id) {
+          const excluded = b.excludedDates || [];
+          return { ...b, excludedDates: [...excluded, targetDate] };
+        }
+        return b;
+      }).filter(b => {
+        if (b.id === id && (b.repeat === 'Once' || !b.repeat) && b.date === targetDate) {
+          return false;
+        }
+        return true;
+      }));
     }
   };
 
@@ -161,12 +155,6 @@ const DailyPlanner = () => {
   const weekDays = getWeekDays(currentDate);
   const visibleBlocksDaily = blocks.filter(b => isBlockVisibleOnDate(b, currentDate));
   const sortedPrintBlocksDaily = [...visibleBlocksDaily].sort((a, b) => a.startTime.localeCompare(b.startTime));
-  
-  // Sorted blocks for the new List View
-  const sortedAllBlocks = [...blocks].sort((a, b) => {
-    if (a.date === b.date) return a.startTime.localeCompare(b.startTime);
-    return a.date.localeCompare(b.date);
-  });
 
   return (
     <div className="w-full flex flex-col h-full space-y-6 relative">
@@ -283,16 +271,18 @@ const DailyPlanner = () => {
           
           {viewMode === 'list' && (
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-[#0a0a0a]">
-              <h3 className="text-xl font-bold text-white mb-6 border-b border-gray-800 pb-3">Master Schedule List</h3>
+              <h3 className="text-xl font-bold text-white mb-6 border-b border-gray-800 pb-3">
+                Schedule List for {new Date(currentDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+              </h3>
               
-              {sortedAllBlocks.length === 0 ? (
+              {sortedPrintBlocksDaily.length === 0 ? (
                 <div className="text-center py-20 text-gray-500 flex flex-col items-center">
                   <svg className="w-12 h-12 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                  <p>Your master schedule is currently empty.</p>
+                  <p>No events scheduled for this day.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {sortedAllBlocks.map(block => (
+                  {sortedPrintBlocksDaily.map(block => (
                     <div key={block.id} className="bg-[#1a1a1a] border border-gray-800 rounded-xl p-5 shadow-sm hover:border-gray-700 transition-colors relative group">
                       
                       <div className="flex justify-between items-start mb-3">
@@ -306,7 +296,7 @@ const DailyPlanner = () => {
                           <button onClick={() => handleEdit(block.id)} title="Edit Block" className="p-1.5 text-gray-400 hover:text-white transition-colors">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                           </button>
-                          <button onClick={() => handleDelete(block.id, block.date, true)} title="Delete Entire Series" className="p-1.5 text-gray-400 hover:text-red-400 transition-colors">
+                          <button onClick={() => handleDelete(block.id, currentDate)} title="Delete for this day" className="p-1.5 text-gray-400 hover:text-red-400 transition-colors">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                           </button>
                         </div>
@@ -314,7 +304,7 @@ const DailyPlanner = () => {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                         <div className="flex items-center text-gray-300 gap-2">
-                          <span className="text-gray-500">📅</span> {new Date(block.date).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                          <span className="text-gray-500">📅</span> {new Date(currentDate).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
                         </div>
                         <div className="flex items-center text-gray-300 gap-2">
                           <span className="text-gray-500">⏰</span> {block.startTime} - {block.endTime}
@@ -456,10 +446,10 @@ const DailyPlanner = () => {
       {/* PRINT VIEW LOGIC */}
       <div className="hidden print:block absolute inset-0 bg-white z-50 p-10 text-black min-h-screen">
         <h1 className="text-4xl font-black border-b-4 border-black pb-4 mb-2 uppercase tracking-tight">
-          {viewMode === 'daily' ? 'Daily Itinerary' : viewMode === 'weekly' ? 'Weekly Schedule' : 'Master Schedule List'}
+          {viewMode === 'daily' ? 'Daily Itinerary' : viewMode === 'weekly' ? 'Weekly Schedule' : 'Schedule List'}
         </h1>
         
-        {viewMode === 'daily' ? (
+        {viewMode === 'daily' || viewMode === 'list' ? (
           <>
             <h2 className="text-xl font-bold text-gray-600 mb-8">{new Date(currentDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h2>
             {sortedPrintBlocksDaily.length === 0 ? (
@@ -493,7 +483,7 @@ const DailyPlanner = () => {
               </table>
             )}
           </>
-        ) : viewMode === 'weekly' ? (
+        ) : (
           <div className="space-y-8 mt-6">
             {weekDays.map(dayStr => {
               const dayBlocks = blocks.filter(b => isBlockVisibleOnDate(b, dayStr)).sort((a, b) => a.startTime.localeCompare(b.startTime));
@@ -523,41 +513,6 @@ const DailyPlanner = () => {
                 </div>
               );
             })}
-          </div>
-        ) : (
-          <div className="mt-6">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b-2 border-black bg-gray-100">
-                  <th className="py-4 px-4 text-sm uppercase tracking-widest text-gray-600 w-1/6">Date</th>
-                  <th className="py-4 px-4 text-sm uppercase tracking-widest text-gray-600 w-1/6">Time</th>
-                  <th className="py-4 px-4 text-sm uppercase tracking-widest text-gray-600 w-1/3">Event Title</th>
-                  <th className="py-4 px-4 text-sm uppercase tracking-widest text-gray-600">Location & Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedAllBlocks.map(block => (
-                  <tr key={block.id} className="border-b border-gray-300">
-                    <td className="py-4 px-4 font-bold text-gray-800 align-top">
-                      {new Date(block.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      {block.repeat !== 'Once' && <div className="text-xs text-indigo-600 font-normal mt-1">🔄 {block.repeat}</div>}
-                    </td>
-                    <td className="py-4 px-4 font-bold text-gray-800 whitespace-nowrap align-top">{block.startTime} - {block.endTime}</td>
-                    <td className="py-4 px-4 align-top">
-                      <div className="font-bold text-black text-lg flex items-center">
-                        <span className="inline-block w-3 h-3 rounded-full mr-2 shrink-0" style={{ backgroundColor: block.color }}></span>
-                        {block.title}
-                      </div>
-                      {block.description && <div className="text-sm text-gray-600 mt-1 ml-5 font-normal">{block.description}</div>}
-                    </td>
-                    <td className="py-4 px-4 text-gray-600 align-top">
-                      {block.location && <div>📍 {block.location}</div>}
-                      {block.thingsToBring && <div className="mt-1">🎒 {block.thingsToBring}</div>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         )}
       </div>
