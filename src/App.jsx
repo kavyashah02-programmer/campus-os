@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import ReactApexChart from 'react-apexcharts';
 
 // --- FIREBASE IMPORTS ---
-import { auth } from './firebase';
+import { auth, db } from './firebase'; // <-- DB imported here
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'; // <-- Firestore tools
 
 import Sidebar from './Sidebar';
 import HabitHeatmap from './HabitHeatmap';
@@ -18,7 +19,51 @@ import FinanceTracker from './FinanceTracker';
 import RewardSystem from './RewardSystem';
 import Library from './Library';
 import AnimalDonation from './AnimalDonation';
-import MotivationalQuote from './MotivationalQuote'; // <-- Imported here
+import MotivationalQuote from './MotivationalQuote';
+
+const MAX_DEVICES = 2;
+
+// --- DEVICE VERIFICATION LOGIC ---
+const enforceDeviceLimit = async (user) => {
+  let deviceId = localStorage.getItem('campusos_device_id');
+  if (!deviceId) {
+    deviceId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+    localStorage.setItem('campusos_device_id', deviceId);
+  }
+
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const deviceType = isMobile ? 'Mobile' : 'Desktop';
+
+  const userRef = doc(db, 'users', user.uid);
+  const userSnap = await getDoc(userRef);
+
+  if (!userSnap.exists()) {
+    await setDoc(userRef, {
+      email: user.email,
+      registeredDevices: [{ id: deviceId, type: deviceType, addedAt: new Date().toISOString() }]
+    });
+    return { allowed: true };
+  }
+
+  const userData = userSnap.data();
+  const devices = userData.registeredDevices || [];
+
+  const isAlreadyRegistered = devices.find(d => d.id === deviceId);
+  if (isAlreadyRegistered) return { allowed: true }; 
+
+  if (devices.length >= MAX_DEVICES) {
+    return { 
+      allowed: false, 
+      message: `Device limit reached. You already have ${MAX_DEVICES} devices connected. Please log out from another device first.`
+    };
+  }
+
+  devices.push({ id: deviceId, type: deviceType, addedAt: new Date().toISOString() });
+  await updateDoc(userRef, { registeredDevices: devices });
+  
+  return { allowed: true };
+};
+
 
 function App() {
   // --- FIREBASE AUTH STATE ---
@@ -39,7 +84,7 @@ function App() {
   
   const [spotifyEmbed, setSpotifyEmbed] = useState(() => localStorage.getItem('react_spotify') || 'https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?theme=0');
 
-  // --- HABIT HISTORY DATABASE (Still LocalStorage for now) ---
+  // --- HABIT HISTORY DATABASE ---
   const [habits, setHabits] = useState([
     { id: 1, text: "Wake Up at 05:30" }, { id: 2, text: "Jogging 15 mins" }, { id: 3, text: "Gym 30 - 60 mins" },
     { id: 4, text: "4-5 hour study" }, { id: 5, text: "Revision" }, { id: 6, text: "Coding 2 hr" }, { id: 7, text: "Leisure time" }
@@ -50,13 +95,12 @@ function App() {
     return saved ? JSON.parse(saved) : {};
   });
 
-  // Watch for Firebase Auth changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsCheckingAuth(false);
     });
-    return () => unsubscribe(); // Cleanup
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => { localStorage.setItem('react_habit_logs', JSON.stringify(habitLogs)); }, [habitLogs]);
@@ -147,24 +191,49 @@ function App() {
     return () => clearInterval(timerInterval);
   }, [isStudying, focusMode, timerTarget]);
 
-  // --- FIREBASE AUTH HANDLERS ---
+  // --- LOGIN HANDLER (WITH DEVICE CHECK) ---
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
     try {
+      let userCredential;
       if (isLoginMode) {
-        await signInWithEmailAndPassword(auth, email, password);
+        userCredential = await signInWithEmailAndPassword(auth, email, password);
       } else {
-        await createUserWithEmailAndPassword(auth, email, password);
+        userCredential = await createUserWithEmailAndPassword(auth, email, password);
       }
-      setEmail(''); setPassword('');
+      
+      // Check the device limit immediately after successful authentication
+      const deviceCheck = await enforceDeviceLimit(userCredential.user);
+      
+      if (!deviceCheck.allowed) {
+        await signOut(auth); // Boot them back out
+        setAuthError(deviceCheck.message); // Show them the error
+        return; 
+      }
+
+      setEmail(''); 
+      setPassword('');
     } catch (err) {
       setAuthError(err.message.replace('Firebase: ', '').replace('(auth/', '').replace(').', ''));
     }
   };
 
+  // --- LOGOUT HANDLER (CLEARS DEVICE SLOT) ---
   const handleLogout = async () => {
     try {
+      if (user) {
+        const deviceId = localStorage.getItem('campusos_device_id');
+        const userRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
+        
+        // Remove this exact device from the database so the slot becomes open again
+        if (userSnap.exists()) {
+          const devices = userSnap.data().registeredDevices || [];
+          const updatedDevices = devices.filter(d => d.id !== deviceId);
+          await updateDoc(userRef, { registeredDevices: updatedDevices });
+        }
+      }
       await signOut(auth);
     } catch (err) {
       console.error(err);
@@ -259,15 +328,10 @@ function App() {
                 </div>
               </div>
             </header>
-            
-            {/* --- NEW MOTIVATIONAL QUOTE WIDGET --- */}
-            <div className="w-full">
-              <MotivationalQuote />
-            </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
               <div className="col-span-1 xl:col-span-2 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg">
-                 <h3 className="text-gray-300 font-semibold text-sm uppercase tracking-wider mb-2">Weekly Productivity Completion % (Habit Tracker) </h3>
+                 <h3 className="text-gray-300 font-semibold text-sm uppercase tracking-wider mb-2">Weekly Productivity (Completion %)</h3>
                  <ReactApexChart options={overviewOptions} series={overviewSeries} type="area" height={160} />
               </div>
 
@@ -275,8 +339,10 @@ function App() {
                 <div className={`rounded-xl p-6 border shadow-lg flex flex-col justify-center items-center text-center transition-colors duration-500 ${progressPercentage > 75 ? 'bg-emerald-900/20 border-emerald-900/50' : 'bg-[#121212] border-gray-800'}`}>
                    <h3 className={`${progressPercentage > 75 ? 'text-emerald-500' : 'text-gray-500'} font-semibold text-sm uppercase tracking-wider mb-2`}>Current Streak</h3>
                    <p className="text-5xl font-bold text-white flex items-center gap-2">{progressPercentage > 75 ? '🔥' : '🧊'} {currentStreak}<span className={`text-lg font-normal mt-3 ${progressPercentage > 75 ? 'text-emerald-400' : 'text-gray-600'}`}>days</span></p>
-                   <p className="text-xs text-gray-500 mt-2 text-center">{progressPercentage}% / 75% required </p>
+                   <p className="text-xs text-gray-500 mt-2 text-center">{progressPercentage}% / 75% required</p>
                 </div>
+                
+                <MotivationalQuote />
               </div>
             </div>
 
