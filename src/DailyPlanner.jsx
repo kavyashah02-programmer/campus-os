@@ -38,12 +38,16 @@ const DailyPlanner = () => {
     return { label: `${hour} ${ampm}`, value: i };
   });
 
+  const timeToMins = (timeStr) => {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    return (h * 60) + m;
+  };
+
   const getBlockStyle = (start, end, blockColor) => {
     if (!start || !end) return {};
-    const [startHour, startMin] = start.split(':').map(Number);
-    const [endHour, endMin] = end.split(':').map(Number);
-    const startMinutes = (startHour * 60) + startMin;
-    let endMinutes = (endHour * 60) + endMin;
+    const startMinutes = timeToMins(start);
+    let endMinutes = timeToMins(end);
     if (endMinutes <= startMinutes) endMinutes = startMinutes + 30; 
     const duration = endMinutes - startMinutes;
 
@@ -59,9 +63,27 @@ const DailyPlanner = () => {
     e.preventDefault();
     if (!title || !startTime || !endTime) return;
 
+    const startMins = timeToMins(startTime);
+    const endMins = timeToMins(endTime);
+
+    // --- OVERLAP DETECTION ---
+    const blocksOnDate = blocks.filter(b => b.id !== editingId && isBlockVisibleOnDate(b, date));
+    const overlappingBlock = blocksOnDate.find(b => {
+      const bStart = timeToMins(b.startTime);
+      const bEnd = timeToMins(b.endTime);
+      // Formula for overlap: New Start is before Existing End AND New End is after Existing Start
+      return startMins < bEnd && endMins > bStart;
+    });
+
+    if (overlappingBlock) {
+      const proceed = window.confirm(`WARNING: This schedule overlaps with "${overlappingBlock.title}" (${overlappingBlock.startTime} - ${overlappingBlock.endTime}).\n\nDo you still want to save it?`);
+      if (!proceed) return;
+    }
+
     if (editingId) {
       setBlocks(blocks.map(b => {
         if (b.id === editingId) {
+          // If you change the repeat type, wipe the deleted exceptions clean!
           const repeatChanged = b.repeat !== repeat;
           return { 
             ...b, title, date, startTime, endTime, repeat, color, thingsToBring, location, description,
@@ -78,6 +100,8 @@ const DailyPlanner = () => {
       };
       setBlocks([...blocks, blockData]);
     }
+    
+    // Clear Form
     setTitle(''); setStartTime(''); setEndTime(''); setThingsToBring(''); setLocation(''); setRepeat('Once'); setDescription('');
   };
 
@@ -92,18 +116,23 @@ const DailyPlanner = () => {
   };
 
   const handleDelete = (id, targetDate, isFullSeries = false) => {
-    const message = isFullSeries ? `Delete this ENTIRE series of scheduled blocks?` : `Delete this schedule block for ${targetDate} only?`;
+    const message = isFullSeries 
+      ? `Delete this ENTIRE series of scheduled blocks?` 
+      : `Delete this occurrence for ${targetDate} only?`;
+      
     if (window.confirm(message)) {
       if (isFullSeries) {
         setBlocks(blocks.filter(b => b.id !== id));
       } else {
         setBlocks(blocks.map(b => {
           if (b.id === id) {
+            // Adds targetDate to the exclusion list, effectively "canceling" it for that day
             const excluded = b.excludedDates || [];
             return { ...b, excludedDates: [...excluded, targetDate] };
           }
           return b;
         }).filter(b => {
+          // If it's a "Once" event and they delete the occurrence, wipe it completely from the database
           if (b.id === id && (b.repeat === 'Once' || !b.repeat) && b.date === targetDate) {
             return false;
           }
@@ -158,10 +187,13 @@ const DailyPlanner = () => {
   };
 
   const weekDays = getWeekDays(currentDate);
-  
-  // This actively filters blocks for the currently selected date in the date picker!
   const visibleBlocksDaily = blocks.filter(b => isBlockVisibleOnDate(b, currentDate));
   const sortedPrintBlocksDaily = [...visibleBlocksDaily].sort((a, b) => a.startTime.localeCompare(b.startTime));
+  
+  const sortedAllBlocks = [...blocks].sort((a, b) => {
+    if (a.date === b.date) return a.startTime.localeCompare(b.startTime);
+    return a.date.localeCompare(b.date);
+  });
 
   return (
     <div className="w-full flex flex-col h-full space-y-6 relative">
@@ -171,11 +203,6 @@ const DailyPlanner = () => {
         <div>
           <h2 className="text-2xl font-bold text-white mb-1 flex items-center gap-2">
             Daily Planner
-            {viewMode === 'weekly' && (
-              <span title="Left-click a block to delete for that day. Right-click to edit." className="w-5 h-5 rounded-full bg-gray-800 text-gray-400 flex items-center justify-center text-xs font-bold cursor-help hover:text-white transition-colors">
-                i
-              </span>
-            )}
           </h2>
           <p className="text-gray-400 text-sm">Time-block your lectures, labs, and focused work.</p>
         </div>
@@ -273,7 +300,7 @@ const DailyPlanner = () => {
           </form>
         </div>
 
-        {/* MAIN PLANNER VIEW (LIST, DAILY, WEEKLY) */}
+        {/* MAIN PLANNER VIEW */}
         <div className="col-span-1 lg:col-span-2 bg-[#121212] rounded-xl border border-gray-800 shadow-lg flex flex-col h-full overflow-hidden">
           
           {viewMode === 'list' && (
@@ -298,12 +325,12 @@ const DailyPlanner = () => {
                           <h4 className="text-white font-bold text-lg">{block.title}</h4>
                         </div>
                         
-                        {/* Actions */}
+                        {/* Hover Actions in List View */}
                         <div className="flex items-center space-x-2 bg-black rounded-lg p-1 border border-gray-800 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => handleEdit(block.id)} title="Edit Block" className="p-1.5 text-gray-400 hover:text-white transition-colors">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                           </button>
-                          <button onClick={() => handleDelete(block.id, currentDate, true)} title="Delete Entire Series" className="p-1.5 text-gray-400 hover:text-red-400 transition-colors">
+                          <button onClick={() => handleDelete(block.id, currentDate, false)} title="Delete Occurrence" className="p-1.5 text-gray-400 hover:text-orange-400 transition-colors">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                           </button>
                         </div>
@@ -390,9 +417,11 @@ const DailyPlanner = () => {
                     <div key={block.id} className="absolute left-16 right-4 rounded-md p-3 shadow-sm overflow-hidden flex flex-col justify-start opacity-90 hover:opacity-100 transition-opacity group" style={getBlockStyle(block.startTime, block.endTime, block.color)}>
                       <div className="flex justify-between items-start">
                         <p className="text-white font-bold text-sm leading-tight drop-shadow-md truncate pr-2">{block.title}</p>
-                        <div className="flex shrink-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 rounded px-1">
-                          <button onClick={(e) => { e.stopPropagation(); handleEdit(block.id); }} className="text-white/70 hover:text-white p-1"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(block.id, currentDate); }} className="text-white/70 hover:text-red-300 p-1"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                        
+                        {/* Improved Daily View Hover Buttons */}
+                        <div className="flex shrink-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded px-1 absolute top-2 right-2">
+                          <button onClick={(e) => { e.stopPropagation(); handleEdit(block.id); }} title="Edit Block" className="text-white/70 hover:text-white p-1"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete(block.id, currentDate, false); }} title="Delete Occurrence" className="text-white/70 hover:text-red-400 p-1"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
                         </div>
                       </div>
                       <p className="text-white/80 text-[11px] font-medium drop-shadow-md mt-0.5">{block.startTime} - {block.endTime}</p>
@@ -428,15 +457,18 @@ const DailyPlanner = () => {
                         {dayBlocks.map((block) => (
                           <div 
                             key={block.id} 
-                            title={`${block.title}\n${block.description ? block.description + '\n' : ''}Left-click: Delete\nRight-click: Edit`}
-                            onClick={(e) => { e.stopPropagation(); handleDelete(block.id, dayStr); }}
-                            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); handleEdit(block.id); }}
-                            className="absolute left-1 right-1 rounded p-1.5 shadow-sm overflow-hidden flex flex-col justify-start cursor-pointer hover:brightness-110 hover:z-20 transition-all border border-white/10" 
+                            className="absolute left-1 right-1 rounded p-1.5 shadow-sm overflow-hidden flex flex-col justify-start group hover:brightness-110 hover:z-20 transition-all border border-white/10" 
                             style={getBlockStyle(block.startTime, block.endTime, block.color)}
                           >
                             <p className="text-white font-bold text-[10px] leading-tight truncate">{block.title}</p>
                             <p className="text-white/80 text-[9px] font-medium truncate">{block.startTime}</p>
                             {block.location && <span className="text-[8px] text-white/90 truncate mt-0.5 opacity-80">📍 {block.location}</span>}
+
+                            {/* Improved Weekly View Hover Buttons */}
+                            <div className="flex shrink-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded px-0.5 absolute top-1 right-1">
+                              <button onClick={(e) => { e.stopPropagation(); handleEdit(block.id); }} title="Edit Block" className="text-white/70 hover:text-white p-0.5"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
+                              <button onClick={(e) => { e.stopPropagation(); handleDelete(block.id, dayStr, false); }} title="Delete Occurrence" className="text-white/70 hover:text-red-400 p-0.5"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                            </div>
                           </div>
                         ))}
                       </div>
