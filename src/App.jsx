@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import ReactApexChart from 'react-apexcharts';
 
 // --- FIREBASE IMPORTS ---
-import { auth, db } from './firebase'; // <-- DB imported here
+import { auth, db } from './firebase'; 
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'; // <-- Firestore tools
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'; 
 
 import Sidebar from './Sidebar';
 import HabitHeatmap from './HabitHeatmap';
@@ -74,6 +74,11 @@ function App() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
+  // --- DEVICE MANAGEMENT STATE ---
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [registeredDevices, setRegisteredDevices] = useState([]);
+  const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+
   const [currentView, setCurrentView] = useState('dashboard');
   const [timeStr, setTimeStr] = useState('');
 
@@ -104,6 +109,22 @@ function App() {
   }, []);
 
   useEffect(() => { localStorage.setItem('react_habit_logs', JSON.stringify(habitLogs)); }, [habitLogs]);
+
+  // --- FETCH DEVICES WHEN SETTINGS OPENS ---
+  useEffect(() => {
+    if (isSettingsOpen && user) {
+      const fetchDevices = async () => {
+        setIsLoadingDevices(true);
+        const userRef = doc(db, 'users', user.uid);
+        const snap = await getDoc(userRef);
+        if (snap.exists()) {
+          setRegisteredDevices(snap.data().registeredDevices || []);
+        }
+        setIsLoadingDevices(false);
+      };
+      fetchDevices();
+    }
+  }, [isSettingsOpen, user]);
 
   const getLocalDateStr = (d = new Date()) => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -203,12 +224,11 @@ function App() {
         userCredential = await createUserWithEmailAndPassword(auth, email, password);
       }
       
-      // Check the device limit immediately after successful authentication
       const deviceCheck = await enforceDeviceLimit(userCredential.user);
       
       if (!deviceCheck.allowed) {
-        await signOut(auth); // Boot them back out
-        setAuthError(deviceCheck.message); // Show them the error
+        await signOut(auth); 
+        setAuthError(deviceCheck.message); 
         return; 
       }
 
@@ -227,7 +247,6 @@ function App() {
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userRef);
         
-        // Remove this exact device from the database so the slot becomes open again
         if (userSnap.exists()) {
           const devices = userSnap.data().registeredDevices || [];
           const updatedDevices = devices.filter(d => d.id !== deviceId);
@@ -237,6 +256,29 @@ function App() {
       await signOut(auth);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // --- REVOKE SPECIFIC DEVICE HANDLER ---
+  const handleRevokeDevice = async (deviceIdToRevoke) => {
+    if (!window.confirm("Are you sure you want to revoke access for this device? It will be logged out immediately.")) return;
+    
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const updatedDevices = registeredDevices.filter(d => d.id !== deviceIdToRevoke);
+      
+      await updateDoc(userRef, { registeredDevices: updatedDevices });
+      setRegisteredDevices(updatedDevices); // Update UI
+      
+      // If they deleted the device they are CURRENTLY using, log them out!
+      const currentDeviceId = localStorage.getItem('campusos_device_id');
+      if (deviceIdToRevoke === currentDeviceId) {
+        await signOut(auth);
+        setIsSettingsOpen(false);
+      }
+    } catch (err) {
+      console.error("Error removing device:", err);
+      alert("Failed to remove device.");
     }
   };
 
@@ -304,9 +346,11 @@ function App() {
     );
   }
 
+  const currentDeviceId = localStorage.getItem('campusos_device_id');
+
   // --- MAIN APP ---
   return (
-    <div className="flex h-screen bg-black font-sans overflow-hidden">
+    <div className="flex h-screen bg-black font-sans overflow-hidden relative">
       <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
 
       <main className="flex-1 p-4 md:p-10 overflow-y-auto print:p-0 print:overflow-visible">
@@ -318,10 +362,18 @@ function App() {
                 <p className="text-gray-400 mt-1">Keep going. You're building something great.</p>
               </div>
               <div className="flex items-center gap-4">
-                <div className="flex flex-col items-end">
+                
+                {/* SETTINGS GEAR & LOGOUT */}
+                <div className="flex flex-col items-end gap-1">
                   <span className="text-xs text-gray-500 font-medium">{user.email}</span>
-                  <button onClick={handleLogout} className="text-sm font-bold text-red-400 hover:text-red-300 transition-colors">Log Out</button>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setIsSettingsOpen(true)} className="text-gray-400 hover:text-white transition-colors" title="Settings & Devices">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    </button>
+                    <button onClick={handleLogout} className="text-sm font-bold text-red-400 hover:text-red-300 transition-colors">Log Out</button>
+                  </div>
                 </div>
+                
                 <div className="flex flex-col items-end bg-[#121212] border border-gray-800 px-5 py-2 rounded-xl shadow-lg">
                   <span className="text-gray-400 font-medium text-xs">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
                   <span className="text-white font-black text-xl tracking-wider font-mono">{timeStr}</span>
@@ -411,6 +463,76 @@ function App() {
           </div>
         )}
       </main>
+
+      {/* --- SETTINGS & DEVICE MANAGEMENT MODAL --- */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#121212] border border-gray-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            
+            <div className="flex justify-between items-center p-5 border-b border-gray-800 bg-[#1a1a1a]">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Account Settings
+              </h2>
+              <button onClick={() => setIsSettingsOpen(false)} className="text-gray-500 hover:text-white transition-colors p-1">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="mb-6">
+                <p className="text-sm text-gray-500 mb-1 font-semibold uppercase tracking-wider">Signed in as</p>
+                <p className="text-white font-medium bg-black border border-gray-800 rounded-lg p-3">{user.email}</p>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">Active Devices ({registeredDevices.length}/{MAX_DEVICES})</p>
+                </div>
+                
+                {isLoadingDevices ? (
+                  <div className="flex justify-center p-4"><div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div></div>
+                ) : (
+                  <div className="space-y-3">
+                    {registeredDevices.length === 0 && <p className="text-gray-500 text-sm italic">No devices found.</p>}
+                    
+                    {registeredDevices.map(device => {
+                      const isCurrent = device.id === currentDeviceId;
+                      return (
+                        <div key={device.id} className={`flex items-center justify-between p-4 rounded-xl border ${isCurrent ? 'bg-indigo-900/10 border-indigo-500/30' : 'bg-black border-gray-800'}`}>
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${isCurrent ? 'bg-indigo-500/20 text-indigo-400' : 'bg-gray-800 text-gray-400'}`}>
+                              {device.type === 'Mobile' ? (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                              ) : (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-white font-semibold text-sm flex items-center gap-2">
+                                {device.type} {isCurrent && <span className="text-[10px] bg-indigo-500 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">This Device</span>}
+                              </p>
+                              <p className="text-xs text-gray-500">Added: {new Date(device.addedAt).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => handleRevokeDevice(device.id)}
+                            className="text-xs font-bold bg-red-900/20 text-red-400 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-lg transition-colors border border-red-900/30"
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

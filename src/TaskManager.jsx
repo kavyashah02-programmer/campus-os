@@ -462,13 +462,13 @@ const TaskManager = () => {
               </div>
             </div>
             
-            <div className="grid grid-cols-7 gap-3 mb-3 text-center">
+            <div className="grid grid-cols-7 gap-1 mb-3 text-center">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
                 <div key={d} className="text-xs font-bold text-gray-500 uppercase tracking-widest">{d}</div>
               ))}
             </div>
             
-            <div className="grid grid-cols-7 gap-3">
+            <div className="grid grid-cols-7 gap-1">
               {Array.from({ length: firstDay }).map((_, i) => (
                 <div key={`empty-${i}`} className="min-h-[80px] rounded-xl bg-[#0a0a0a] border border-gray-900/50"></div>
               ))}
