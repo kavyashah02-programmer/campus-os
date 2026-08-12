@@ -15,6 +15,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [deadlineTime, setDeadlineTime] = useState(''); // NEW: Deadline Time state
   const [desc, setDesc] = useState('');
   const [place, setPlace] = useState('');
   const [thingsToBring, setThingsToBring] = useState('');
@@ -57,7 +58,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
         
         updatedTasks[taskIndex] = {
           ...t,
-          title, date, time, deadline, desc, place, thingsToBring, repeat, category, color, image,
+          title, date, time, deadline, deadlineTime, desc, place, thingsToBring, repeat, category, color, image,
           excludedDates: repeatChanged ? [] : (t.excludedDates || [])
         };
       }
@@ -66,7 +67,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
       const newTask = {
         id: generateId(),
         createdAt: Date.now(),
-        title, date, time, deadline, desc, place, thingsToBring, repeat, category, color, image,
+        title, date, time, deadline, deadlineTime, desc, place, thingsToBring, repeat, category, color, image,
         completedDates: [], 
         excludedDates: []   
       };
@@ -77,7 +78,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     setTasks(updatedTasks);
     updateCloudData('tasks', updatedTasks);
     
-    setTitle(''); setTime(''); setDeadline(''); setDesc(''); setPlace(''); setThingsToBring(''); setImage(null); setRepeat('none');
+    setTitle(''); setTime(''); setDeadline(''); setDeadlineTime(''); setDesc(''); setPlace(''); setThingsToBring(''); setImage(null); setRepeat('none');
   };
 
   const handleEdit = (id) => {
@@ -86,6 +87,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     
     setEditingId(t.id);
     setTitle(t.title); setDate(t.date); setTime(t.time || ''); setDeadline(t.deadline || ''); 
+    setDeadlineTime(t.deadlineTime || ''); // Load deadline time
     setDesc(t.desc || ''); setPlace(t.place || ''); setThingsToBring(t.thingsToBring || ''); 
     setRepeat(t.repeat || 'none'); setCategory(t.category || 'Academic');
     setColor(t.color || '#3b82f6'); setImage(t.image || null);
@@ -137,7 +139,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   };
 
   const cancelEdit = () => {
-    setEditingId(null); setTitle(''); setTime(''); setDeadline(''); setDesc(''); setImage(null); setThingsToBring(''); setPlace('');
+    setEditingId(null); setTitle(''); setTime(''); setDeadline(''); setDeadlineTime(''); setDesc(''); setImage(null); setThingsToBring(''); setPlace('');
   };
 
   const isTaskVisibleOnDate = (task, targetDateStr) => {
@@ -167,17 +169,23 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     return false;
   };
 
+  // --- SORTING LOGIC: Arranged by Date, then Timeline (Time / Deadline Time) ---
   const selectedDateTasks = tasks
     .filter(t => isTaskVisibleOnDate(t, selectedDate))
     .sort((a, b) => {
-      if (a.deadline && b.deadline) return new Date(a.deadline) - new Date(b.deadline);
-      if (a.deadline) return -1;
-      if (b.deadline) return 1; 
+      // 1. Sort by Date first
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
 
-      if (a.time && b.time) return a.time.localeCompare(b.time);
-      if (a.time) return -1;
-      if (b.time) return 1;
+      // 2. Sort by Timeline (Deadline Time or Start Time) next
+      const timeA = a.deadlineTime || a.time || '';
+      const timeB = b.deadlineTime || b.time || '';
+      if (timeA && timeB) return timeA.localeCompare(timeB);
+      if (timeA) return -1;
+      if (timeB) return 1;
 
+      // 3. Fallback to creation time
       return (a.createdAt || 0) - (b.createdAt || 0);
     });
   
@@ -291,17 +299,23 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
               </div>
             </div>
 
+            {/* NEW: Deadline & Deadline Time Row */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Deadline</label>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Deadline Date</label>
                 <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none [color-scheme:dark] transition-colors" />
               </div>
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Repeat</label>
-                <select value={repeat} onChange={(e) => setRepeat(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-colors">
-                  <option value="none">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="biweekly">Once in two weeks</option><option value="monthly">Monthly</option>
-                </select>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Deadline Time</label>
+                <input type="time" value={deadlineTime} onChange={(e) => setDeadlineTime(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none [color-scheme:dark] transition-colors" />
               </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Repeat</label>
+              <select value={repeat} onChange={(e) => setRepeat(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-colors">
+                <option value="none">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="biweekly">Once in two weeks</option><option value="monthly">Monthly</option>
+              </select>
             </div>
 
             <div>
@@ -406,7 +420,11 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
                             </h4>
                             
                             <div className="flex flex-wrap gap-2 mt-2">
-                              {task.deadline && <span className="text-[10px] text-red-400 bg-red-900/20 border border-red-900/50 px-2 py-1 rounded shadow-sm">⚠️ Due: {task.deadline}</span>}
+                              {task.deadline && (
+                                <span className="text-[10px] text-red-400 bg-red-900/20 border border-red-900/50 px-2 py-1 rounded shadow-sm">
+                                  ⚠️ Due: {task.deadline} {task.deadlineTime ? `at ${task.deadlineTime}` : ''}
+                                </span>
+                              )}
                               {task.time && <span className="text-[10px] text-gray-300 bg-gray-800 px-2 py-1 rounded border border-gray-700">🕒 {task.time}</span>}
                               {task.place && <span className="text-[10px] text-gray-300 bg-gray-800 px-2 py-1 rounded border border-gray-700">📍 {task.place}</span>}
                               {task.thingsToBring && <span className="text-[10px] text-emerald-400 bg-emerald-900/20 border border-emerald-900/50 px-2 py-1 rounded shadow-sm">🎒 {task.thingsToBring}</span>}
