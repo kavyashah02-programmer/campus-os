@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from './firebase';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 
-const TaskManager = () => {
-  const [tasks, setTasks] = useState([]);
+// 1. Accept the new props from App.jsx
+const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
+  // 2. Initialize state with the cloud data
+  const [tasks, setTasks] = useState(cloudTasks);
+  
+  // 3. Keep local state synced if cloud data changes (e.g., from another device)
+  useEffect(() => {
+    setTasks(cloudTasks);
+  }, [cloudTasks]);
   
   const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState('');
@@ -21,29 +26,12 @@ const TaskManager = () => {
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // --- 1. FIREBASE REAL-TIME SYNC ---
-  useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    // Create a live tunnel to only YOUR tasks
-    const q = query(collection(db, 'tasks'), where("userId", "==", user.uid));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const taskList = [];
-      snapshot.forEach((document) => {
-        taskList.push({ id: document.id, ...document.data() });
-      });
-      setTasks(taskList);
-    });
-
-    return () => unsubscribe(); // Close the tunnel when you leave the page
-  }, []);
+  // Generate a unique ID since we aren't using Firestore's auto-ID here anymore
+  const generateId = () => Date.now().toString() + Math.random().toString(36).slice(2, 9);
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Cloud database documents have a 1MB limit.
       if (file.size > 700 * 1024) {
         alert("For cloud syncing, please select an image under 700KB.");
         return;
@@ -54,41 +42,42 @@ const TaskManager = () => {
     }
   };
 
-  // --- 2. FIREBASE SAVE / UPDATE ---
-  const handleSave = async (e) => {
+  // --- SAVE / UPDATE ---
+  const handleSave = (e) => {
     e.preventDefault();
     if (!title || !date) return;
-    
-    const user = auth.currentUser;
-    if (!user) return alert("You must be logged in to save tasks.");
 
-    try {
-      if (editingId) {
-        const taskRef = doc(db, 'tasks', editingId);
-        const t = tasks.find(x => x.id === editingId);
+    let updatedTasks = [...tasks];
+
+    if (editingId) {
+      const taskIndex = updatedTasks.findIndex(x => x.id === editingId);
+      if (taskIndex > -1) {
+        const t = updatedTasks[taskIndex];
         const repeatChanged = t.repeat !== repeat;
         
-        await updateDoc(taskRef, {
+        updatedTasks[taskIndex] = {
+          ...t,
           title, date, time, deadline, desc, place, thingsToBring, repeat, category, color, image,
-          excludedDates: repeatChanged ? [] : (t.excludedDates || []) 
-        });
-        setEditingId(null);
-      } else {
-        const taskData = {
-          userId: user.uid,
-          createdAt: Date.now(),
-          title, date, time, deadline, desc, place, thingsToBring, repeat, category, color, image,
-          completedDates: [], 
-          excludedDates: []   
+          excludedDates: repeatChanged ? [] : (t.excludedDates || [])
         };
-        await addDoc(collection(db, 'tasks'), taskData);
       }
-      
-      setTitle(''); setTime(''); setDeadline(''); setDesc(''); setPlace(''); setThingsToBring(''); setImage(null); setRepeat('none');
-    } catch (err) {
-      console.error("Error saving task:", err);
-      alert("Failed to save task to the cloud.");
+      setEditingId(null);
+    } else {
+      const newTask = {
+        id: generateId(),
+        createdAt: Date.now(),
+        title, date, time, deadline, desc, place, thingsToBring, repeat, category, color, image,
+        completedDates: [], 
+        excludedDates: []   
+      };
+      updatedTasks.push(newTask);
     }
+    
+    // Update local state and push to the cloud universally
+    setTasks(updatedTasks);
+    updateCloudData('tasks', updatedTasks);
+    
+    setTitle(''); setTime(''); setDeadline(''); setDesc(''); setPlace(''); setThingsToBring(''); setImage(null); setRepeat('none');
   };
 
   const handleEdit = (id) => {
@@ -104,36 +93,46 @@ const TaskManager = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // --- 3. FIREBASE TOGGLE (Complete) ---
-  const toggleTask = async (id, targetDate) => {
-    const t = tasks.find(x => x.id === id);
-    if (!t) return;
-    
-    const completed = t.completedDates || [];
-    let newCompleted;
-    if (completed.includes(targetDate)) {
-      newCompleted = completed.filter(d => d !== targetDate);
-    } else {
-      newCompleted = [...completed, targetDate];
-    }
-    
-    await updateDoc(doc(db, 'tasks', id), { completedDates: newCompleted });
+  // --- TOGGLE (Complete) ---
+  const toggleTask = (id, targetDate) => {
+    const updatedTasks = tasks.map(t => {
+      if (t.id === id) {
+        const completed = t.completedDates || [];
+        const newCompleted = completed.includes(targetDate)
+          ? completed.filter(d => d !== targetDate)
+          : [...completed, targetDate];
+        return { ...t, completedDates: newCompleted };
+      }
+      return t;
+    });
+
+    setTasks(updatedTasks);
+    updateCloudData('tasks', updatedTasks);
   };
 
-  // --- 4. FIREBASE DELETE ---
-  const deleteTask = async (id, targetDate) => {
+  // --- DELETE ---
+  const deleteTask = (id, targetDate) => {
     const t = tasks.find(x => x.id === id);
     if (!t) return;
 
     if (window.confirm(`Delete this task for ${targetDate} only?`)) {
+      let updatedTasks;
+
       if ((t.repeat === 'none' || !t.repeat) && t.date === targetDate) {
         // Completely destroy the one-time task
-        await deleteDoc(doc(db, 'tasks', id));
+        updatedTasks = tasks.filter(x => x.id !== id);
       } else {
         // Just hide it for this specific date
-        const excluded = t.excludedDates || [];
-        await updateDoc(doc(db, 'tasks', id), { excludedDates: [...excluded, targetDate] });
+        updatedTasks = tasks.map(x => {
+          if (x.id === id) {
+            return { ...x, excludedDates: [...(x.excludedDates || []), targetDate] };
+          }
+          return x;
+        });
       }
+
+      setTasks(updatedTasks);
+      updateCloudData('tasks', updatedTasks);
     }
   };
 
@@ -182,8 +181,8 @@ const TaskManager = () => {
       return (a.createdAt || 0) - (b.createdAt || 0);
     });
   
-  // --- 5. FIREBASE CARRY FORWARD ---
-  const handleCarryForward = async () => {
+  // --- CARRY FORWARD ---
+  const handleCarryForward = () => {
     const pendingTasks = selectedDateTasks.filter(t => {
       return t.completedDates ? !t.completedDates.includes(selectedDate) : !t.completed;
     });
@@ -196,39 +195,43 @@ const TaskManager = () => {
     const currDateObj = new Date(selectedDate);
     currDateObj.setUTCDate(currDateObj.getUTCDate() + 1);
     const nextDateStr = currDateObj.toISOString().split('T')[0];
-    const user = auth.currentUser;
 
     if (window.confirm(`Carry forward ${pendingTasks.length} pending task(s) to ${nextDateStr}?`)) {
-      try {
-        const updates = pendingTasks.map(async (pt) => {
-          if (pt.repeat === 'none' || !pt.repeat) {
-            return updateDoc(doc(db, 'tasks', pt.id), { date: nextDateStr });
-          } else {
-            await updateDoc(doc(db, 'tasks', pt.id), {
-              excludedDates: [...(pt.excludedDates || []), selectedDate]
-            });
-            
-            const clone = {
-              userId: user.uid,
-              createdAt: Date.now(),
-              title: pt.title, time: pt.time || '', deadline: pt.deadline || '', desc: pt.desc || '', 
-              place: pt.place || '', thingsToBring: pt.thingsToBring || '', category: pt.category || 'Academic', 
-              color: pt.color || '#3b82f6', image: pt.image || null,
-              date: nextDateStr,
-              repeat: 'none',
-              completedDates: [],
-              excludedDates: []
-            };
-            return addDoc(collection(db, 'tasks'), clone);
+      let updatedTasks = [...tasks];
+
+      pendingTasks.forEach((pt, index) => {
+        if (pt.repeat === 'none' || !pt.repeat) {
+          // Simply change the date of the existing one-time task
+          const idx = updatedTasks.findIndex(x => x.id === pt.id);
+          if (idx > -1) {
+            updatedTasks[idx] = { ...updatedTasks[idx], date: nextDateStr };
           }
-        });
-        
-        await Promise.all(updates);
-        setSelectedDate(nextDateStr);
-      } catch (err) {
-        console.error("Error carrying forward:", err);
-        alert("Failed to carry tasks forward.");
-      }
+        } else {
+          // Exclude it from today, and clone it for tomorrow
+          const idx = updatedTasks.findIndex(x => x.id === pt.id);
+          if (idx > -1) {
+            updatedTasks[idx] = { 
+              ...updatedTasks[idx], 
+              excludedDates: [...(updatedTasks[idx].excludedDates || []), selectedDate] 
+            };
+          }
+          
+          const clone = {
+            ...pt,
+            id: generateId() + index, // Ensure unique ID for clones
+            createdAt: Date.now(),
+            date: nextDateStr,
+            repeat: 'none',
+            completedDates: [],
+            excludedDates: []
+          };
+          updatedTasks.push(clone);
+        }
+      });
+
+      setTasks(updatedTasks);
+      updateCloudData('tasks', updatedTasks);
+      setSelectedDate(nextDateStr);
     }
   };
 

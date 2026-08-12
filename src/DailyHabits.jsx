@@ -1,29 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-const DailyHabits = () => {
-  // 1. The State
-  // This holds your daily tasks. We are pre-filling it with some engineering and health targets.
-  const [habits, setHabits] = useState([
-    { id: 1, text: "Review Engineering Math Notes", completed: true },
+// 1. Accept the new cloud props from App.jsx
+const DailyHabits = ({ cloudDailyHabits = [], updateCloudData }) => {
+  
+  // Default targets for new accounts
+  const defaultHabits = [
+    { id: 1, text: "Review Engineering Math Notes", completed: false },
     { id: 2, text: "Work on Web Application Logic", completed: false },
     { id: 3, text: "Data Structures Practice", completed: false },
-    { id: 4, text: "Drink 2L of Water", completed: true },
+    { id: 4, text: "Drink 2L of Water", completed: false },
     { id: 5, text: "Focus for 25 minutes (Pomodoro)", completed: false },
-  ]);
+  ];
 
-  // 2. The Logic
-  // This function flips a habit from false to true (or true to false) when clicked.
+  // 2. Initialize state with cloud data (fallback to defaults if cloud is empty)
+  const [habits, setHabits] = useState(
+    cloudDailyHabits.length > 0 ? cloudDailyHabits : defaultHabits
+  );
+
+  // 3. Keep local state synced if cloud data changes (e.g., toggled on your phone)
+  useEffect(() => {
+    if (cloudDailyHabits.length > 0) {
+      setHabits(cloudDailyHabits);
+    }
+  }, [cloudDailyHabits]);
+
+  // 4. The Logic - Toggle and Sync
   const toggleHabit = (id) => {
-    setHabits(habits.map(habit => 
+    const updatedHabits = habits.map(habit => 
       habit.id === id ? { ...habit, completed: !habit.completed } : habit
-    ));
+    );
+    
+    // Update local state AND push to the cloud universally
+    setHabits(updatedHabits);
+    updateCloudData('dailyHabits', updatedHabits);
   };
 
   // Automatically calculate progress based on the checked boxes
   const completedCount = habits.filter(h => h.completed).length;
-  const progressPercentage = Math.round((completedCount / habits.length) * 100) || 0;
+  const progressPercentage = habits.length === 0 ? 0 : Math.round((completedCount / habits.length) * 100);
 
-  // 3. The UI
+  // 5. The UI
   return (
     <div className="bg-[#121212] rounded-xl p-6 shadow-lg border border-gray-800 w-full max-w-2xl flex flex-col h-full">
       <div className="flex justify-between items-center mb-6">

@@ -1,18 +1,30 @@
 import React, { useState, useEffect } from 'react';
 
-const FinanceTracker = () => {
-  const [accounts, setAccounts] = useState(() => {
-    const saved = localStorage.getItem('react_finance_accounts');
-    return saved ? JSON.parse(saved) : [
-      { id: 'acc_1', name: 'Cash / Wallet', initialBalance: 0, isLocked: false },
-      { id: 'acc_2', name: 'Bank Account', initialBalance: 0, isLocked: false }
-    ];
-  });
+// 1. Accept the new cloud props from App.jsx
+const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
+  
+  // Default accounts for new users
+  const defaultAccounts = [
+    { id: 'acc_1', name: 'Cash / Wallet', initialBalance: 0, isLocked: false },
+    { id: 'acc_2', name: 'Bank Account', initialBalance: 0, isLocked: false }
+  ];
 
-  const [transactions, setTransactions] = useState(() => {
-    const saved = localStorage.getItem('react_finance_transactions');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // 2. Initialize state with cloud data (fallback to defaults)
+  const [accounts, setAccounts] = useState(cloudFinance.accounts || defaultAccounts);
+  const [transactions, setTransactions] = useState(cloudFinance.transactions || []);
+
+  // 3. Keep local state synced if cloud data changes
+  useEffect(() => {
+    if (cloudFinance.accounts) setAccounts(cloudFinance.accounts);
+    if (cloudFinance.transactions) setTransactions(cloudFinance.transactions);
+  }, [cloudFinance]);
+
+  // --- UNIVERSAL CLOUD SAVE HELPER ---
+  const saveToCloud = (updatedAccounts, updatedTransactions) => {
+    setAccounts(updatedAccounts);
+    setTransactions(updatedTransactions);
+    updateCloudData('finance', { accounts: updatedAccounts, transactions: updatedTransactions });
+  };
 
   const [editingTxId, setEditingTxId] = useState(null);
   const [type, setType] = useState('expense'); 
@@ -23,12 +35,9 @@ const FinanceTracker = () => {
   const [category, setCategory] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // NEW: PDF Date Range Filters
+  // PDF Date Range Filters
   const [pdfStartDate, setPdfStartDate] = useState('');
   const [pdfEndDate, setPdfEndDate] = useState('');
-
-  useEffect(() => { localStorage.setItem('react_finance_accounts', JSON.stringify(accounts)); }, [accounts]);
-  useEffect(() => { localStorage.setItem('react_finance_transactions', JSON.stringify(transactions)); }, [transactions]);
 
   const lockedAccounts = accounts.filter(a => a.isLocked);
   
@@ -41,7 +50,7 @@ const FinanceTracker = () => {
         setAccountId(''); setToAccountId('');
       }
     }
-  }, [accounts, type, editingTxId]);
+  }, [accounts, type, editingTxId, accountId, toAccountId, lockedAccounts]);
 
   // --- CORE LOGIC: Balance Calculations ---
   const getNetFlow = (accId, excludeTxId = null) => {
@@ -65,16 +74,19 @@ const FinanceTracker = () => {
 
   // --- ACCOUNT MANAGEMENT ---
   const handleAccountChange = (id, field, value) => {
-    setAccounts(accounts.map(acc => acc.id === id ? { ...acc, [field]: field === 'initialBalance' ? Number(value) : value } : acc));
+    const updatedAccounts = accounts.map(acc => acc.id === id ? { ...acc, [field]: field === 'initialBalance' ? Number(value) : value } : acc);
+    saveToCloud(updatedAccounts, transactions);
   };
 
   const toggleLock = (id) => {
-    setAccounts(accounts.map(acc => {
+    let rejected = false;
+    const updatedAccounts = accounts.map(acc => {
       if (acc.id === id) {
         if (!acc.isLocked) {
           const netFlow = getNetFlow(acc.id);
           if (acc.initialBalance + netFlow < 0) {
             alert(`Lock Rejected!\n\nYour net transactions amount to ₹${netFlow}.\nSetting the initial balance to ₹${acc.initialBalance} would result in a negative balance (₹${acc.initialBalance + netFlow}).\n\nPlease enter an initial amount of at least ₹${Math.abs(netFlow)}.`);
+            rejected = true;
             return acc; 
           }
           return { ...acc, isLocked: true };
@@ -83,15 +95,23 @@ const FinanceTracker = () => {
         }
       }
       return acc;
-    }));
+    });
+
+    if (!rejected) saveToCloud(updatedAccounts, transactions);
   };
 
-  const addAccount = () => setAccounts([...accounts, { id: Date.now().toString(), name: 'New Account', initialBalance: 0, isLocked: false }]);
+  const addAccount = () => {
+    const updatedAccounts = [...accounts, { id: Date.now().toString(), name: 'New Account', initialBalance: 0, isLocked: false }];
+    saveToCloud(updatedAccounts, transactions);
+  };
   
   const deleteAccount = (id) => {
     const hasHistory = transactions.some(t => t.accountId === id || t.toAccountId === id);
     if (hasHistory) return alert("Cannot delete an account that has transaction history. Please delete its transactions first.");
-    if (window.confirm("Delete this account?")) setAccounts(accounts.filter(a => a.id !== id));
+    if (window.confirm("Delete this account?")) {
+      const updatedAccounts = accounts.filter(a => a.id !== id);
+      saveToCloud(updatedAccounts, transactions);
+    }
   };
 
   // --- TRANSACTION MANAGEMENT ---
@@ -116,12 +136,15 @@ const FinanceTracker = () => {
       type, accountId, toAccountId, amount: numAmount, desc, category, date
     };
 
+    let updatedTransactions;
     if (editingTxId) {
-      setTransactions(transactions.map(t => t.id === editingTxId ? newTx : t));
+      updatedTransactions = transactions.map(t => t.id === editingTxId ? newTx : t);
       setEditingTxId(null);
     } else {
-      setTransactions([newTx, ...transactions]);
+      updatedTransactions = [newTx, ...transactions];
     }
+    
+    saveToCloud(accounts, updatedTransactions);
     
     setAmount(''); setDesc(''); setCategory('');
   };
@@ -139,7 +162,10 @@ const FinanceTracker = () => {
   };
 
   const deleteTransaction = (id) => {
-    if (window.confirm("Delete this transaction?")) setTransactions(transactions.filter(t => t.id !== id));
+    if (window.confirm("Delete this transaction?")) {
+      const updatedTransactions = transactions.filter(t => t.id !== id);
+      saveToCloud(accounts, updatedTransactions);
+    }
   };
 
   const exportPDF = () => window.print();

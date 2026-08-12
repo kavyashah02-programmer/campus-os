@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-const LaundryTracker = () => {
-  const [items, setItems] = useState([
+// 1. Accept the new cloud props from App.jsx
+const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
+  
+  // Default items for new users
+  const defaultItems = [
     { id: 1, name: 'T-Shirts', price: 10, count: 0 },
     { id: 2, name: 'Jeans', price: 20, count: 0 },
     { id: 3, name: 'Trackpants', price: 15, count: 0 },
@@ -10,38 +13,61 @@ const LaundryTracker = () => {
     { id: 6, name: 'Underwear', price: 5, count: 0 },
     { id: 7, name: 'Handkerchief', price: 5, count: 0 },
     { id: 8, name: 'Bed Sheets', price: 40, count: 0 },
-  ]);
+  ];
 
-  const [totalDue, setTotalDue] = useState(0);
+  // 2. Initialize state with cloud data (fallback to defaults if empty)
+  const [items, setItems] = useState(cloudLaundry.items || defaultItems);
+  const [totalDue, setTotalDue] = useState(cloudLaundry.totalDue || 0);
+  
   const [newName, setNewName] = useState('');
   const [newPrice, setNewPrice] = useState('');
 
+  // 3. Keep local state synced if cloud data changes from another device
+  useEffect(() => {
+    if (cloudLaundry.items) setItems(cloudLaundry.items);
+    if (cloudLaundry.totalDue !== undefined) setTotalDue(cloudLaundry.totalDue);
+  }, [cloudLaundry]);
+
+  // --- UNIVERSAL CLOUD SAVE HELPER ---
+  const saveToCloud = (newItems, newTotalDue) => {
+    setItems(newItems);
+    setTotalDue(newTotalDue);
+    if (updateCloudData) {
+      updateCloudData('laundry', { items: newItems, totalDue: newTotalDue });
+    }
+  };
+
   const updateCount = (id, delta) => {
-    setItems(items.map(item => {
+    const newItems = items.map(item => {
       if (item.id === id) {
         const newCount = item.count + delta;
         return { ...item, count: newCount >= 0 ? newCount : 0 };
       }
       return item;
-    }));
+    });
+    saveToCloud(newItems, totalDue);
   };
 
   const updatePrice = (id, newBasePrice) => {
-    setItems(items.map(item => 
+    const newItems = items.map(item => 
       item.id === id ? { ...item, price: newBasePrice >= 0 ? newBasePrice : 0 } : item
-    ));
+    );
+    saveToCloud(newItems, totalDue);
   };
 
-  // NEW FUNCTION: Deletes an item from the list entirely
   const deleteItem = (id) => {
-    setItems(items.filter(item => item.id !== id));
+    const newItems = items.filter(item => item.id !== id);
+    saveToCloud(newItems, totalDue);
   };
 
   const addNewItem = (e) => {
     e.preventDefault();
     if (!newName || !newPrice) return;
     const newItem = { id: Date.now(), name: newName, price: Number(newPrice), count: 0 };
-    setItems([...items, newItem]);
+    const newItems = [...items, newItem];
+    
+    saveToCloud(newItems, totalDue);
+    
     setNewName('');
     setNewPrice('');
   };
@@ -50,11 +76,15 @@ const LaundryTracker = () => {
 
   const sendToLaundry = () => {
     if (currentBatchTotal === 0) return;
-    setTotalDue(totalDue + currentBatchTotal);
-    setItems(items.map(item => ({ ...item, count: 0 })));
+    const newTotalDue = totalDue + currentBatchTotal;
+    const newItems = items.map(item => ({ ...item, count: 0 }));
+    
+    saveToCloud(newItems, newTotalDue);
   };
 
-  const payBill = () => setTotalDue(0);
+  const payBill = () => {
+    saveToCloud(items, 0);
+  };
 
   return (
     <div className="bg-[#121212] rounded-xl p-6 shadow-lg border border-gray-700 w-full flex flex-col h-[650px]">
@@ -100,7 +130,7 @@ const LaundryTracker = () => {
                 <button onClick={() => updateCount(item.id, 1)} className="w-8 h-8 flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-800 rounded font-bold text-lg transition-colors">+</button>
               </div>
 
-              {/* NEW: Delete Button */}
+              {/* Delete Button */}
               <button 
                 onClick={() => deleteItem(item.id)} 
                 title="Remove item"

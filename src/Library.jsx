@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-// --- IndexedDB Setup for Massive File Storage ---
+// --- IndexedDB Setup for Large File Storage (Stored Locally on Device) ---
 const initDB = () => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('DigitalLibraryDB', 1);
@@ -46,22 +46,30 @@ const deleteFileDB = async (id) => {
 };
 
 // --- Library Component ---
-const Library = () => {
+const Library = ({ cloudLibrary = {}, updateCloudData }) => {
   const defaultCategories = ['Notes', 'PPTs', 'Mind Maps', 'Shortcuts', 'Short Notes'];
   
-  // Folders stay in LocalStorage because they are just tiny text strings
-  const [folders, setFolders] = useState(() => {
-    const saved = localStorage.getItem('react_lib_folders');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // Folders sync to the Cloud
+  const [folders, setFolders] = useState(cloudLibrary.folders || []);
   
-  // Files start empty and load asynchronously from IndexedDB
+  useEffect(() => {
+    if (cloudLibrary.folders) setFolders(cloudLibrary.folders);
+  }, [cloudLibrary.folders]);
+
+  const saveFoldersToCloud = (newFolders) => {
+    setFolders(newFolders);
+    if (updateCloudData) {
+      updateCloudData('library', { folders: newFolders });
+    }
+  };
+  
+  // Files start empty and load asynchronously from local IndexedDB
   const [files, setFiles] = useState([]);
   const [currentPath, setCurrentPath] = useState([{ id: 'root', name: 'My Library', level: 0 }]);
   const [newItemName, setNewItemName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
-  // Load files on mount
+  // Load local files on mount
   useEffect(() => {
     const loadFiles = async () => {
       try {
@@ -74,11 +82,6 @@ const Library = () => {
     loadFiles();
   }, []);
 
-  // Save folders to local storage
-  useEffect(() => {
-    localStorage.setItem('react_lib_folders', JSON.stringify(folders));
-  }, [folders]);
-
   const currentFolder = currentPath[currentPath.length - 1];
 
   const handleCreateFolder = (e) => {
@@ -88,7 +91,6 @@ const Library = () => {
     const newFolder = { id: Date.now().toString(), parentId: currentFolder.id, name: newItemName.trim(), level: currentFolder.level + 1 };
     let newFolders = [...folders, newFolder];
 
-    // Auto-generate subfolders when a Topic (Level 1) is created
     if (newFolder.level === 1) {
       const categoryFolders = defaultCategories.map((cat, idx) => ({
         id: `cat_${newFolder.id}_${idx}`, parentId: newFolder.id, name: cat, level: 2
@@ -96,7 +98,8 @@ const Library = () => {
       newFolders = [...newFolders, ...categoryFolders];
     }
 
-    setFolders(newFolders); setNewItemName('');
+    saveFoldersToCloud(newFolders);
+    setNewItemName('');
   };
 
   const handleFileUpload = async (e) => {
@@ -106,10 +109,13 @@ const Library = () => {
     setIsUploading(true);
     const newFiles = [];
 
+    // FILE SIZE LIMIT: 512 MB 
+    const MAX_FILE_SIZE_MB = 512;
+    const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
     for (const f of fileList) {
-      // 20MB = 20 * 1024 * 1024 bytes
-      if (f.size > 20 * 1024 * 1024) {
-        alert(`Warning: "${f.name}" is over 20MB and was skipped.`);
+      if (f.size > MAX_FILE_SIZE_BYTES) {
+        alert(`Warning: "${f.name}" is over ${MAX_FILE_SIZE_MB}MB and was skipped.`);
         continue;
       }
       
@@ -120,7 +126,7 @@ const Library = () => {
         type: f.type,
         size: (f.size / 1024 / 1024).toFixed(2) + ' MB',
         date: new Date().toLocaleDateString(),
-        blob: f // We store the actual File/Blob object natively in IndexedDB
+        blob: f // Stores the native File/Blob object in local IndexedDB
       };
       
       await saveFileDB(fileRecord);
@@ -133,18 +139,19 @@ const Library = () => {
 
   const deleteFolder = async (id, e) => {
     e.stopPropagation();
-    if(window.confirm("Delete this folder and ALL its contents?")) {
+    if (window.confirm("Delete this folder and ALL its contents?")) {
       let idsToDelete = [id];
       let foundNew = true;
-      while(foundNew) {
+      while (foundNew) {
         foundNew = false;
         folders.forEach(f => {
-          if(idsToDelete.includes(f.parentId) && !idsToDelete.includes(f.id)) { idsToDelete.push(f.id); foundNew = true; }
+          if (idsToDelete.includes(f.parentId) && !idsToDelete.includes(f.id)) { idsToDelete.push(f.id); foundNew = true; }
         });
       }
-      setFolders(folders.filter(f => !idsToDelete.includes(f.id)));
       
-      // Delete all associated files from IndexedDB
+      const updatedFolders = folders.filter(f => !idsToDelete.includes(f.id));
+      saveFoldersToCloud(updatedFolders);
+      
       const filesToDelete = files.filter(f => idsToDelete.includes(f.folderId));
       for (const f of filesToDelete) {
         await deleteFileDB(f.id);
@@ -154,7 +161,7 @@ const Library = () => {
   };
 
   const deleteFile = async (id) => { 
-    if(window.confirm("Delete this file?")) {
+    if (window.confirm("Delete this file?")) {
       await deleteFileDB(id);
       setFiles(files.filter(f => f.id !== id));
     }
@@ -162,13 +169,12 @@ const Library = () => {
 
   // --- View & Download Logic ---
   const viewFile = (fileRecord) => {
-    // Creates a temporary local URL for the blob and opens it in a new tab
     const url = URL.createObjectURL(fileRecord.blob);
     window.open(url, '_blank');
   };
 
   const downloadFile = (fileRecord, e) => {
-    e.stopPropagation(); // Prevents triggering the viewFile click
+    e.stopPropagation(); 
     const url = URL.createObjectURL(fileRecord.blob);
     const a = document.createElement('a');
     a.href = url;
@@ -189,7 +195,10 @@ const Library = () => {
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 h-full flex flex-col">
       <header className="bg-[#121212] rounded-2xl border border-gray-800 p-5 shadow-lg">
         <h1 className="text-2xl font-extrabold text-white tracking-tight">Digital Library</h1>
-        <p className="text-gray-400 text-sm mt-0.5">Organize subjects, view PDFs natively, and upload files up to 20MB.</p>
+        <p className="text-gray-400 text-sm mt-0.5">Organize subjects, view PDFs natively, and upload files up to 512MB.</p>
+        <p className="text-amber-400/80 text-xs mt-2 bg-amber-950/30 border border-amber-900/40 rounded-lg p-2">
+          ℹ️ <strong>Note on File Syncing:</strong> Your folder structures sync across all devices via the cloud, but uploaded files are saved locally on your device up to 512MB and will not sync across different devices.
+        </p>
       </header>
 
       <div className="flex-1 bg-[#121212] rounded-2xl border border-gray-800 shadow-lg flex flex-col overflow-hidden">
@@ -208,7 +217,7 @@ const Library = () => {
         <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#1a1a1a]">
           {currentFolder.level < 2 ? (
             <form onSubmit={handleCreateFolder} className="flex gap-2">
-              <input type="text" value={newItemName} onChange={e=>setNewItemName(e.target.value)} placeholder={`New ${currentFolder.level === 0 ? 'Subject' : 'Topic'}...`} className="bg-black border border-gray-700 text-white rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-500" />
+              <input type="text" value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder={`New ${currentFolder.level === 0 ? 'Subject' : 'Topic'}...`} className="bg-black border border-gray-700 text-white rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-500" />
               <button type="submit" className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-1.5 rounded-lg text-sm font-bold transition-colors">Create Folder</button>
             </form>
           ) : (
@@ -219,7 +228,7 @@ const Library = () => {
                 </button>
                 <input type="file" multiple onChange={handleFileUpload} disabled={isUploading} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
               </div>
-              <span className="text-xs text-gray-500 ml-2">Max 20MB per file</span>
+              <span className="text-xs text-gray-500 ml-2">Max 512MB per file</span>
             </div>
           )}
         </div>
@@ -234,7 +243,6 @@ const Library = () => {
           )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            
             {/* Folders */}
             {currentSubFolders.map(folder => (
               <div key={folder.id} onClick={() => navigateTo(folder)} className="bg-black border border-gray-800 rounded-xl p-4 cursor-pointer hover:border-blue-500 hover:bg-[#1a1a1a] transition-all group relative flex flex-col items-center justify-center text-center h-32">
@@ -276,4 +284,4 @@ const Library = () => {
   );
 };
 
-export default Library; 
+export default Library;

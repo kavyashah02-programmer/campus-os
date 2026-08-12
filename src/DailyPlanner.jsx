@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
-const DailyPlanner = () => {
+// 1. Accept the new cloud props from App.jsx
+const DailyPlanner = ({ cloudPlanner = [], updateCloudData }) => {
   const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
   const [viewMode, setViewMode] = useState('daily'); 
   
@@ -15,14 +16,15 @@ const DailyPlanner = () => {
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
 
-  const [blocks, setBlocks] = useState(() => {
-    const saved = localStorage.getItem('react_daily_planner');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // 2. Initialize state with cloud data
+  const [blocks, setBlocks] = useState(cloudPlanner);
+
+  // 3. Keep local state synced if cloud data changes
+  useEffect(() => {
+    setBlocks(cloudPlanner);
+  }, [cloudPlanner]);
 
   const [nowMins, setNowMins] = useState((new Date().getHours() * 60) + new Date().getMinutes());
-
-  useEffect(() => { localStorage.setItem('react_daily_planner', JSON.stringify(blocks)); }, [blocks]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -59,6 +61,7 @@ const DailyPlanner = () => {
     };
   };
 
+  // --- SAVE / UPDATE LOGIC ---
   const handleSave = (e) => {
     e.preventDefault();
     if (!title || !startTime || !endTime) return;
@@ -66,12 +69,10 @@ const DailyPlanner = () => {
     const startMins = timeToMins(startTime);
     const endMins = timeToMins(endTime);
 
-    // --- OVERLAP DETECTION ---
     const blocksOnDate = blocks.filter(b => b.id !== editingId && isBlockVisibleOnDate(b, date));
     const overlappingBlock = blocksOnDate.find(b => {
       const bStart = timeToMins(b.startTime);
       const bEnd = timeToMins(b.endTime);
-      // Formula for overlap: New Start is before Existing End AND New End is after Existing Start
       return startMins < bEnd && endMins > bStart;
     });
 
@@ -80,10 +81,11 @@ const DailyPlanner = () => {
       if (!proceed) return;
     }
 
+    let updatedBlocks;
+    
     if (editingId) {
-      setBlocks(blocks.map(b => {
+      updatedBlocks = blocks.map(b => {
         if (b.id === editingId) {
-          // If you change the repeat type, wipe the deleted exceptions clean!
           const repeatChanged = b.repeat !== repeat;
           return { 
             ...b, title, date, startTime, endTime, repeat, color, thingsToBring, location, description,
@@ -91,15 +93,19 @@ const DailyPlanner = () => {
           };
         }
         return b;
-      }));
+      });
       setEditingId(null);
     } else {
       const blockData = { 
         id: Date.now(), title, date, startTime, endTime, repeat, color, thingsToBring, location, description,
         excludedDates: [] 
       };
-      setBlocks([...blocks, blockData]);
+      updatedBlocks = [...blocks, blockData];
     }
+    
+    // 4. Update local state AND push to the cloud universally
+    setBlocks(updatedBlocks);
+    updateCloudData('planner', updatedBlocks);
     
     // Clear Form
     setTitle(''); setStartTime(''); setEndTime(''); setThingsToBring(''); setLocation(''); setRepeat('Once'); setDescription('');
@@ -115,30 +121,35 @@ const DailyPlanner = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // --- DELETE LOGIC ---
   const handleDelete = (id, targetDate, isFullSeries = false) => {
     const message = isFullSeries 
       ? `Delete this ENTIRE series of scheduled blocks?` 
       : `Delete this occurrence for ${targetDate} only?`;
       
     if (window.confirm(message)) {
+      let updatedBlocks;
+      
       if (isFullSeries) {
-        setBlocks(blocks.filter(b => b.id !== id));
+        updatedBlocks = blocks.filter(b => b.id !== id);
       } else {
-        setBlocks(blocks.map(b => {
+        updatedBlocks = blocks.map(b => {
           if (b.id === id) {
-            // Adds targetDate to the exclusion list, effectively "canceling" it for that day
             const excluded = b.excludedDates || [];
             return { ...b, excludedDates: [...excluded, targetDate] };
           }
           return b;
         }).filter(b => {
-          // If it's a "Once" event and they delete the occurrence, wipe it completely from the database
           if (b.id === id && (b.repeat === 'Once' || !b.repeat) && b.date === targetDate) {
             return false;
           }
           return true;
-        }));
+        });
       }
+      
+      // 4. Update local state AND push to the cloud universally
+      setBlocks(updatedBlocks);
+      updateCloudData('planner', updatedBlocks);
     }
   };
 
@@ -190,11 +201,6 @@ const DailyPlanner = () => {
   const visibleBlocksDaily = blocks.filter(b => isBlockVisibleOnDate(b, currentDate));
   const sortedPrintBlocksDaily = [...visibleBlocksDaily].sort((a, b) => a.startTime.localeCompare(b.startTime));
   
-  const sortedAllBlocks = [...blocks].sort((a, b) => {
-    if (a.date === b.date) return a.startTime.localeCompare(b.startTime);
-    return a.date.localeCompare(b.date);
-  });
-
   return (
     <div className="w-full flex flex-col h-full space-y-6 relative">
       

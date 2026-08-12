@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
-const RewardSystem = () => {
+// 1. Accept the new cloud props from App.jsx
+const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
   // --- 11 Categories (7 Multi-Tier, 4 Gold-Only) ---
   const categories = [
     {
@@ -79,31 +80,37 @@ const RewardSystem = () => {
   ];
 
   // --- Unified State Management ---
-  const [data, setData] = useState(() => {
-    const saved = localStorage.getItem('react_rewards_v3');
-    if (saved) return JSON.parse(saved);
-    
-    // Default Empty State
-    const initialState = { progress: {}, cheats: {}, claimed: [] };
-    categories.forEach(c => {
-      initialState.progress[c.id] = 0;
-      initialState.cheats[c.id] = 0;
-    });
-    return initialState;
+  const defaultState = { progress: {}, cheats: {}, claimed: [] };
+  categories.forEach(c => {
+    defaultState.progress[c.id] = 0;
+    defaultState.cheats[c.id] = 0;
   });
 
+  // 2. Initialize with Cloud Data
+  const [data, setData] = useState(
+    cloudRewards && Object.keys(cloudRewards).length > 0 ? cloudRewards : defaultState
+  );
+
+  // 3. Keep local state synced if cloud data changes
   useEffect(() => {
-    localStorage.setItem('react_rewards_v3', JSON.stringify(data));
-  }, [data]);
+    if (cloudRewards && Object.keys(cloudRewards).length > 0) {
+      setData(cloudRewards);
+    }
+  }, [cloudRewards]);
 
   // --- Core Engine Functions ---
 
   // 1. Log a productive day
   const handleLog = (groupId) => {
-    setData(prev => ({
-      ...prev,
-      progress: { ...prev.progress, [groupId]: (prev.progress[groupId] || 0) + 1 }
-    }));
+    setData(prev => {
+      const newData = {
+        ...prev,
+        progress: { ...prev.progress, [groupId]: (prev.progress[groupId] || 0) + 1 }
+      };
+      // Push to Cloud
+      if (updateCloudData) updateCloudData('rewards', newData);
+      return newData;
+    });
   };
 
   // 2. Claim a specific tier
@@ -124,7 +131,10 @@ const RewardSystem = () => {
         newClaimed = newClaimed.filter(id => !groupTierIds.includes(id));
       }
 
-      return { progress: newProgress, cheats: newCheats, claimed: newClaimed };
+      const newData = { progress: newProgress, cheats: newCheats, claimed: newClaimed };
+      // Push to Cloud
+      if (updateCloudData) updateCloudData('rewards', newData);
+      return newData;
     });
 
     alert(`🎉 Target hit! You earned: ${tier.reward}\n\n${tier.cheats > 0 ? `You now have ${tier.cheats} new Cheat Day(s) for this specific task to protect your streak!` : ''}`);
@@ -136,21 +146,29 @@ const RewardSystem = () => {
     
     if (availableCheats > 0) {
       if (window.confirm(`You have ${availableCheats} Cheat Day(s) available for this task. \n\nDo you want to use 1 Cheat Day to instantly fill the gap (+1 progress) and keep your streak counting?`)) {
-        setData(prev => ({
-          ...prev,
-          cheats: { ...prev.cheats, [groupId]: prev.cheats[groupId] - 1 },
-          progress: { ...prev.progress, [groupId]: prev.progress[groupId] + 1 }
-        }));
+        setData(prev => {
+          const newData = {
+            ...prev,
+            cheats: { ...prev.cheats, [groupId]: prev.cheats[groupId] - 1 },
+            progress: { ...prev.progress, [groupId]: prev.progress[groupId] + 1 }
+          };
+          // Push to Cloud
+          if (updateCloudData) updateCloudData('rewards', newData);
+          return newData;
+        });
       }
     } else {
       if (window.confirm("You have 0 Cheat Days for this task. Your streak is broken.\n\nResetting all tiers for this category to 0.")) {
         setData(prev => {
           const groupTierIds = categories.find(c => c.id === groupId).tiers.map(t => t.id);
-          return {
+          const newData = {
             ...prev,
             progress: { ...prev.progress, [groupId]: 0 },
             claimed: prev.claimed.filter(id => !groupTierIds.includes(id))
           };
+          // Push to Cloud
+          if (updateCloudData) updateCloudData('rewards', newData);
+          return newData;
         });
       }
     }

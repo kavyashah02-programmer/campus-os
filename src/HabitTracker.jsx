@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import ReactApexChart from 'react-apexcharts';
 
-const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs }) => {
+// 1. Accept updateCloudData alongside the state props from App.jsx
+const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudData }) => {
   const getLocalDateStr = (d = new Date()) => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
@@ -17,25 +18,39 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs }) => {
     if (habits.length > 0 && !selectedAnalysisHabit) {
       setSelectedAnalysisHabit(habits[0].id.toString());
     }
-  }, [habits]);
+  }, [habits, selectedAnalysisHabit]);
 
-  // Update central history object
+  // --- 2. Update toggle to push to the cloud ---
   const toggleHabit = (id) => {
-    setHabitLogs(prev => {
-      const dayLogs = prev[logDate] || {};
-      return { ...prev, [logDate]: { ...dayLogs, [id]: !dayLogs[id] } };
-    });
+    const dayLogs = habitLogs[logDate] || {};
+    const newHabitLogs = { 
+      ...habitLogs, 
+      [logDate]: { ...dayLogs, [id]: !dayLogs[id] } 
+    };
+    
+    setHabitLogs(newHabitLogs); // Update Dashboard UI immediately
+    if (updateCloudData) updateCloudData('habitLogs', newHabitLogs); // Push to Firebase
   };
 
+  // --- 3. Update add to push to the cloud ---
   const addHabit = (e) => {
     e.preventDefault();
     if (!newHabitText.trim()) return;
-    setHabits([...habits, { id: Date.now(), text: newHabitText }]);
+    
+    const newHabits = [...habits, { id: Date.now(), text: newHabitText }];
+    setHabits(newHabits);
+    if (updateCloudData) updateCloudData('habits', newHabits);
+    
     setNewHabitText('');
   };
 
+  // --- 4. Update delete to push to the cloud ---
   const deleteHabit = (id) => {
-    if(window.confirm("Delete this habit entirely?")) setHabits(habits.filter(h => h.id !== id));
+    if(window.confirm("Delete this habit entirely?")) {
+      const newHabits = habits.filter(h => h.id !== id);
+      setHabits(newHabits);
+      if (updateCloudData) updateCloudData('habits', newHabits);
+    }
   };
 
   // --- CHART 1: Daily Donut Math ---

@@ -6,6 +6,7 @@ import { auth, db } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'; 
 
+// --- COMPONENTS ---
 import Sidebar from './Sidebar';
 import HabitHeatmap from './HabitHeatmap';
 import LaundryTracker from './LaundryTracker';
@@ -74,32 +75,34 @@ function App() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
+  // --- MASTER CLOUD DATA STATE ---
+  const [cloudData, setCloudData] = useState({});
+  const [isDataLoading, setIsDataLoading] = useState(false);
+
   // --- DEVICE MANAGEMENT STATE ---
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [registeredDevices, setRegisteredDevices] = useState([]);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
 
+  // --- DASHBOARD UI STATE ---
   const [currentView, setCurrentView] = useState('dashboard');
   const [timeStr, setTimeStr] = useState('');
-
   const [focusMode, setFocusMode] = useState('stopwatch'); 
   const [timerTarget, setTimerTarget] = useState(45); 
   const [studyTime, setStudyTime] = useState(0); 
   const [isStudying, setIsStudying] = useState(false);
-  
-  const [spotifyEmbed, setSpotifyEmbed] = useState(() => localStorage.getItem('react_spotify') || 'https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?theme=0');
+  const [spotifyEmbed, setSpotifyEmbed] = useState('https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?theme=0');
 
-  // --- HABIT HISTORY DATABASE ---
+  // --- HABIT STATE (Hydrated by Cloud) ---
   const [habits, setHabits] = useState([
     { id: 1, text: "Wake Up at 05:30" }, { id: 2, text: "Jogging 15 mins" }, { id: 3, text: "Gym 30 - 60 mins" },
     { id: 4, text: "4-5 hour study" }, { id: 5, text: "Revision" }, { id: 6, text: "Coding 2 hr" }, { id: 7, text: "Leisure time" }
   ]);
+  const [habitLogs, setHabitLogs] = useState({});
 
-  const [habitLogs, setHabitLogs] = useState(() => {
-    const saved = localStorage.getItem('react_habit_logs');
-    return saved ? JSON.parse(saved) : {};
-  });
-
+  // --------------------------------------------------------
+  // 1. AUTHENTICATION LISTENER
+  // --------------------------------------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -108,52 +111,91 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => { localStorage.setItem('react_habit_logs', JSON.stringify(habitLogs)); }, [habitLogs]);
+  // --------------------------------------------------------
+  // 2. MASTER CLOUD SYNC LOGIC
+  // --------------------------------------------------------
+  useEffect(() => {
+    if (user) {
+      setIsDataLoading(true);
+      const fetchAllData = async () => {
+        const userRef = doc(db, 'users', user.uid);
+        const snap = await getDoc(userRef);
+        
+        if (snap.exists()) {
+          const data = snap.data();
+          setCloudData(data); 
+          
+          // Hydrate the dashboard specific states
+          if (data.habitLogs) setHabitLogs(data.habitLogs);
+          if (data.habits) setHabits(data.habits);
+          if (data.spotifyEmbed) setSpotifyEmbed(data.spotifyEmbed);
+        }
+        setIsDataLoading(false);
+      };
+      fetchAllData();
+    }
+  }, [user]);
 
-  // --- FETCH DEVICES WHEN SETTINGS OPENS ---
+  const updateCloudData = async (databaseKey, newData) => {
+    if (!user) return;
+    const userRef = doc(db, 'users', user.uid);
+    await setDoc(userRef, { [databaseKey]: newData }, { merge: true });
+    setCloudData(prev => ({ ...prev, [databaseKey]: newData }));
+  };
+  
+  // Auto-sync dashboard habits & spotify to cloud when changed
+  useEffect(() => {
+    if (user && Object.keys(habitLogs).length > 0) updateCloudData('habitLogs', habitLogs);
+  }, [habitLogs, user]);
+
+  useEffect(() => {
+    if (user && habits.length > 0) updateCloudData('habits', habits);
+  }, [habits, user]);
+
+  useEffect(() => {
+    if (user && spotifyEmbed) updateCloudData('spotifyEmbed', spotifyEmbed);
+  }, [spotifyEmbed, user]);
+
+
+  // --------------------------------------------------------
+  // 3. DEVICE SETTINGS FETCHER
+  // --------------------------------------------------------
   useEffect(() => {
     if (isSettingsOpen && user) {
       const fetchDevices = async () => {
         setIsLoadingDevices(true);
         const userRef = doc(db, 'users', user.uid);
         const snap = await getDoc(userRef);
-        if (snap.exists()) {
-          setRegisteredDevices(snap.data().registeredDevices || []);
-        }
+        if (snap.exists()) setRegisteredDevices(snap.data().registeredDevices || []);
         setIsLoadingDevices(false);
       };
       fetchDevices();
     }
   }, [isSettingsOpen, user]);
 
+
+  // --------------------------------------------------------
+  // 4. UTILITIES & CALCULATIONS
+  // --------------------------------------------------------
   const getLocalDateStr = (d = new Date()) => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
-  // --- TRUE STREAK CALCULATOR ---
   let currentStreak = 0;
   const nowForStreak = new Date();
   nowForStreak.setHours(0,0,0,0);
-  
   for (let i = 0; i < 365; i++) {
     const d = new Date(nowForStreak);
     d.setDate(d.getDate() - i);
     const dateStr = getLocalDateStr(d);
-    
     const logs = habitLogs[dateStr] || {};
     const completed = Object.values(logs).filter(Boolean).length;
     const pct = habits.length > 0 ? Math.round((completed / habits.length) * 100) : 0;
-    
-    if (pct >= 75) {
-      currentStreak++;
-    } else if (i === 0) {
-      continue; 
-    } else {
-      break; 
-    }
+    if (pct >= 75) { currentStreak++; } 
+    else if (i === 0) { continue; } 
+    else { break; }
   }
 
-  // --- WEEKLY PRODUCTIVITY CHART DATA ---
   const last7Days = Array.from({length: 7}, (_, i) => {
     const d = new Date(); 
     d.setHours(0,0,0,0);
@@ -167,21 +209,26 @@ function App() {
     return habits.length > 0 ? Math.round((c / habits.length) * 100) : 0;
   });
   const overviewCategories = last7Days.map(dStr => new Date(dStr).toLocaleDateString('en-US', {weekday: 'short'}));
-
   const overviewOptions = { chart: { type: 'area', toolbar: { show: false }, background: 'transparent' }, colors: ['#10b981'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 90, 100] } }, dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 2 }, xaxis: { categories: overviewCategories, axisBorder: { show: false }, axisTicks: { show: false }, labels: { style: { colors: '#6b7280' } } }, yaxis: { show: false, min: 0, max: 100 }, grid: { show: false }, theme: { mode: 'dark' } };
   const overviewSeries = [{ name: 'Completion %', data: overviewSeriesData }];
 
+
+  // --------------------------------------------------------
+  // 5. TIMERS & NOTIFICATIONS
+  // --------------------------------------------------------
   useEffect(() => {
     if (!user) return; 
     const clockInterval = setInterval(() => setTimeStr(new Date().toLocaleTimeString()), 1000);
     if (!("Notification" in window)) return;
+    
+    // Cloud task notification sync
     const taskInterval = setInterval(() => {
-      const storedTasks = JSON.parse(localStorage.getItem('react_tasks') || '[]');
+      const currentTasks = cloudData.tasks || [];
       const now = new Date();
       const todayStr = getLocalDateStr(now);
       const nowMins = (now.getHours() * 60) + now.getMinutes();
 
-      storedTasks.forEach(task => {
+      currentTasks.forEach(task => {
         if (task.completed || task.date !== todayStr || !task.time) return;
         const [hrs, mins] = task.time.split(':').map(Number);
         const targetMins = (hrs * 60) + mins;
@@ -193,7 +240,7 @@ function App() {
     }, 60000); 
 
     return () => { clearInterval(clockInterval); clearInterval(taskInterval); };
-  }, [user]);
+  }, [user, cloudData.tasks]);
 
   useEffect(() => {
     let timerInterval = null;
@@ -212,7 +259,10 @@ function App() {
     return () => clearInterval(timerInterval);
   }, [isStudying, focusMode, timerTarget]);
 
-  // --- LOGIN HANDLER (WITH DEVICE CHECK) ---
+
+  // --------------------------------------------------------
+  // 6. AUTHENTICATION & HANDLERS
+  // --------------------------------------------------------
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -223,15 +273,12 @@ function App() {
       } else {
         userCredential = await createUserWithEmailAndPassword(auth, email, password);
       }
-      
       const deviceCheck = await enforceDeviceLimit(userCredential.user);
-      
       if (!deviceCheck.allowed) {
         await signOut(auth); 
         setAuthError(deviceCheck.message); 
         return; 
       }
-
       setEmail(''); 
       setPassword('');
     } catch (err) {
@@ -239,14 +286,12 @@ function App() {
     }
   };
 
-  // --- LOGOUT HANDLER (CLEARS DEVICE SLOT) ---
   const handleLogout = async () => {
     try {
       if (user) {
         const deviceId = localStorage.getItem('campusos_device_id');
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userRef);
-        
         if (userSnap.exists()) {
           const devices = userSnap.data().registeredDevices || [];
           const updatedDevices = devices.filter(d => d.id !== deviceId);
@@ -259,25 +304,19 @@ function App() {
     }
   };
 
-  // --- REVOKE SPECIFIC DEVICE HANDLER ---
   const handleRevokeDevice = async (deviceIdToRevoke) => {
     if (!window.confirm("Are you sure you want to revoke access for this device? It will be logged out immediately.")) return;
-    
     try {
       const userRef = doc(db, 'users', user.uid);
       const updatedDevices = registeredDevices.filter(d => d.id !== deviceIdToRevoke);
-      
       await updateDoc(userRef, { registeredDevices: updatedDevices });
-      setRegisteredDevices(updatedDevices); // Update UI
-      
-      // If they deleted the device they are CURRENTLY using, log them out!
+      setRegisteredDevices(updatedDevices);
       const currentDeviceId = localStorage.getItem('campusos_device_id');
       if (deviceIdToRevoke === currentDeviceId) {
         await signOut(auth);
         setIsSettingsOpen(false);
       }
     } catch (err) {
-      console.error("Error removing device:", err);
       alert("Failed to remove device.");
     }
   };
@@ -287,8 +326,9 @@ function App() {
   const handleSpotifyLink = (e) => {
     let link = e.target.value;
     if (link.includes('spotify.com') && !link.includes('/embed/')) link = link.replace('spotify.com/', 'spotify.com/embed/');
-    setSpotifyEmbed(link); localStorage.setItem('react_spotify', link);
+    setSpotifyEmbed(link); 
   };
+  
   const getFullSpotifyLink = () => spotifyEmbed.replace('/embed', '').split('?')[0];
   const formatTimer = (totalSeconds) => {
     const h = Math.floor(totalSeconds / 3600);
@@ -299,12 +339,14 @@ function App() {
 
   const displaySeconds = focusMode === 'stopwatch' ? studyTime : Math.max(0, (timerTarget * 60) - studyTime);
   const canTakeBreak = studyTime >= 1800; 
-  
   const todayLogs = habitLogs[getLocalDateStr()] || {};
   const completedTodayCount = Object.values(todayLogs).filter(Boolean).length;
   const progressPercentage = habits.length > 0 ? Math.round((completedTodayCount / habits.length) * 100) : 0;
 
-  // --- LOADING STATE ---
+
+  // --------------------------------------------------------
+  // RENDER BLOCKS
+  // --------------------------------------------------------
   if (isCheckingAuth) {
     return (
       <div className="flex h-screen bg-black items-center justify-center font-sans">
@@ -313,7 +355,6 @@ function App() {
     );
   }
 
-  // --- LOCK SCREEN (FIREBASE AUTH) ---
   if (!user) {
     return (
       <div className="flex h-screen bg-black items-center justify-center font-sans">
@@ -348,7 +389,6 @@ function App() {
 
   const currentDeviceId = localStorage.getItem('campusos_device_id');
 
-  // --- MAIN APP ---
   return (
     <div className="flex h-screen bg-black font-sans overflow-hidden relative">
       <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
@@ -363,7 +403,6 @@ function App() {
               </div>
               <div className="flex items-center gap-4">
                 
-                {/* SETTINGS GEAR & LOGOUT */}
                 <div className="flex flex-col items-end gap-1">
                   <span className="text-xs text-gray-500 font-medium">{user.email}</span>
                   <div className="flex items-center gap-3">
@@ -445,21 +484,22 @@ function App() {
           </div>
         )}
 
-        {currentView === 'tasks' && <TaskManager />}
-        {currentView === 'planner' && <DailyPlanner />}
-        {currentView === 'habits' && <HabitTracker habits={habits} setHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} />}
-        {currentView === 'cgpa' && <CGPACalculator />}
-        {currentView === 'exams' && <ExamTracker />}
-        {currentView === 'fitness' && <FitnessTracker />}
-        {currentView === 'finance' && <FinanceTracker />}
-        {currentView === 'rewards' && <RewardSystem />}
-        {currentView === 'library' && <Library />}
-        {currentView === 'donate' && <AnimalDonation />}
+        {/* --- CLOUD HYDRATED COMPONENTS --- */}
+        {currentView === 'tasks' && <TaskManager cloudTasks={cloudData.tasks || []} updateCloudData={updateCloudData} />}
+        {currentView === 'planner' && <DailyPlanner cloudPlanner={cloudData.planner || []} updateCloudData={updateCloudData} />}
+        {currentView === 'habits' && <HabitTracker habits={habits} setHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} updateCloudData={updateCloudData} />}
+        {currentView === 'cgpa' && <CGPACalculator cloudCGPA={cloudData.cgpa || {}} updateCloudData={updateCloudData} />}
+        {currentView === 'exams' && <ExamTracker cloudExams={cloudData.exams || []} updateCloudData={updateCloudData} />}
+        {currentView === 'fitness' && <FitnessTracker cloudFitness={cloudData.fitness || {}} updateCloudData={updateCloudData} />}
+        {currentView === 'finance' && <FinanceTracker cloudFinance={cloudData.finance || {}} updateCloudData={updateCloudData} />}
+        {currentView === 'rewards' && <RewardSystem cloudRewards={cloudData.rewards || {}} updateCloudData={updateCloudData} />}
+        {currentView === 'library' && <Library cloudLibrary={cloudData.library || []} updateCloudData={updateCloudData} />}
+        {currentView === 'donate' && <AnimalDonation cloudDonations={cloudData.donations || []} updateCloudData={updateCloudData} />}
         
         {currentView === 'laundry' && (
           <div className="animate-in fade-in duration-500 h-full max-w-4xl mx-auto">
              <header className="mb-8"><h2 className="text-3xl font-bold text-white">Hostel Laundry Centre</h2></header>
-            <LaundryTracker />
+            <LaundryTracker cloudLaundry={cloudData.laundry || {}} updateCloudData={updateCloudData} />
           </div>
         )}
       </main>

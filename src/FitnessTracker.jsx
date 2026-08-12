@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import ReactApexChart from 'react-apexcharts';
 
-const FitnessTracker = () => {
+// 1. Accept the new cloud props from App.jsx
+const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
   const getLocalDateStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   
   const [fitnessDate, setFitnessDate] = useState(getLocalDateStr());
@@ -12,10 +13,13 @@ const FitnessTracker = () => {
   const [shakes, setShakes] = useState(0);  // Shakes state
   const [isSaved, setIsSaved] = useState(true); // Tracks unsaved changes
 
-  const [allData, setAllData] = useState(() => {
-    const saved = localStorage.getItem('react_fitness');
-    return saved ? JSON.parse(saved) : {};
-  });
+  // 2. Initialize state with cloud data
+  const [allData, setAllData] = useState(cloudFitness);
+
+  // 3. Keep local state synced if cloud data changes
+  useEffect(() => {
+    setAllData(cloudFitness);
+  }, [cloudFitness]);
 
   // Warn before closing browser tab if unsaved
   useEffect(() => {
@@ -28,9 +32,9 @@ const FitnessTracker = () => {
 
   useEffect(() => {
     const dayData = allData[fitnessDate] || { exercise: 0, sleep: 0, water: 0, coffee: 0, shakes: 0 };
-    setExercise(dayData.exercise); 
-    setSleep(dayData.sleep); 
-    setWater(dayData.water); 
+    setExercise(dayData.exercise || 0); 
+    setSleep(dayData.sleep || 0); 
+    setWater(dayData.water || 0); 
     setCoffee(dayData.coffee || 0); 
     setShakes(dayData.shakes || 0);
     setIsSaved(true);
@@ -41,10 +45,11 @@ const FitnessTracker = () => {
     setFitnessDate(newDate);
   };
 
+  // 4. Update the save function to push to the cloud universally
   const handleSave = () => {
     const newData = { ...allData, [fitnessDate]: { exercise, sleep, water, coffee, shakes } };
     setAllData(newData);
-    localStorage.setItem('react_fitness', JSON.stringify(newData));
+    updateCloudData('fitness', newData);
     setIsSaved(true);
     setTimeout(() => { setIsSaved(false); setIsSaved(true); }, 2000); // Visual ping
   };
@@ -63,9 +68,9 @@ const FitnessTracker = () => {
   daysArray.forEach(d => {
     const dStr = `${year}-${month}-${String(d).padStart(2, '0')}`;
     const logs = allData[dStr] || { exercise: 0, sleep: 0, water: 0 };
-    seriesExercise.push(logs.exercise);
-    seriesSleep.push(logs.sleep);
-    seriesWater.push(logs.water);
+    seriesExercise.push(logs.exercise || 0);
+    seriesSleep.push(logs.sleep || 0);
+    seriesWater.push(logs.water || 0);
   });
 
   const chartOptions = {

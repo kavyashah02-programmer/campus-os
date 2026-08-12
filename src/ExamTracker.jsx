@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 
-const ExamTracker = () => {
-  const [exams, setExams] = useState(() => {
-    const saved = localStorage.getItem('react_exams');
-    return saved ? JSON.parse(saved) : [];
-  });
+// 1. Accept the new cloud props from App.jsx
+const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
+  // 2. Initialize state with cloud data
+  const [exams, setExams] = useState(cloudExams);
 
   const [selectedExamId, setSelectedExamId] = useState(null);
   const [editingExamId, setEditingExamId] = useState(null);
@@ -14,23 +13,40 @@ const ExamTracker = () => {
   const [examDate, setExamDate] = useState('');
   const [newTopic, setNewTopic] = useState('');
 
+  // 3. Keep local state synced if cloud data changes
   useEffect(() => {
-    localStorage.setItem('react_exams', JSON.stringify(exams));
-    if (!selectedExamId && exams.length > 0) setSelectedExamId(exams[0].id);
+    setExams(cloudExams);
+  }, [cloudExams]);
+
+  // Ensure an exam is selected if available
+  useEffect(() => {
+    if (!selectedExamId && exams.length > 0) {
+      setSelectedExamId(exams[0].id);
+    } else if (selectedExamId && !exams.find(e => e.id === selectedExamId)) {
+      // If the selected exam was deleted from another device
+      setSelectedExamId(exams.length > 0 ? exams[0].id : null);
+    }
   }, [exams, selectedExamId]);
 
+  // --- SAVE / UPDATE EXAM ---
   const handleExamSubmit = (e) => {
     e.preventDefault();
     if (!examTitle || !examDate) return;
     
+    let updatedExams;
     if (editingExamId) {
-      setExams(exams.map(ex => ex.id === editingExamId ? { ...ex, title: examTitle, subject: examSubject, date: examDate } : ex));
+      updatedExams = exams.map(ex => ex.id === editingExamId ? { ...ex, title: examTitle, subject: examSubject, date: examDate } : ex);
       setEditingExamId(null);
     } else {
       const newExam = { id: Date.now(), title: examTitle, subject: examSubject, date: examDate, topics: [] };
-      setExams([...exams, newExam]);
+      updatedExams = [...exams, newExam];
       setSelectedExamId(newExam.id);
     }
+    
+    // 4. Update local state AND push to the cloud universally
+    setExams(updatedExams);
+    updateCloudData('exams', updatedExams);
+    
     setExamTitle(''); setExamSubject(''); setExamDate('');
   };
 
@@ -42,24 +58,38 @@ const ExamTracker = () => {
   const deleteExam = (id) => {
     if(window.confirm("Delete this exam and all its topics?")) {
       const remaining = exams.filter(e => e.id !== id);
+      
       setExams(remaining);
+      updateCloudData('exams', remaining);
+      
       if (selectedExamId === id) setSelectedExamId(remaining.length > 0 ? remaining[0].id : null);
     }
   };
 
+  // --- TOPIC MANAGEMENT ---
   const addTopic = (e) => {
     e.preventDefault();
     if (!newTopic || !selectedExamId) return;
-    setExams(exams.map(ex => ex.id === selectedExamId ? { ...ex, topics: [...ex.topics, { id: Date.now(), name: newTopic, studied: false, revised: false }] } : ex));
+    
+    const updatedExams = exams.map(ex => ex.id === selectedExamId ? { ...ex, topics: [...ex.topics, { id: Date.now(), name: newTopic, studied: false, revised: false }] } : ex);
+    
+    setExams(updatedExams);
+    updateCloudData('exams', updatedExams);
     setNewTopic('');
   };
 
   const toggleTopicState = (examId, topicId, field) => {
-    setExams(exams.map(ex => ex.id === examId ? { ...ex, topics: ex.topics.map(t => t.id === topicId ? { ...t, [field]: !t[field] } : t) } : ex));
+    const updatedExams = exams.map(ex => ex.id === examId ? { ...ex, topics: ex.topics.map(t => t.id === topicId ? { ...t, [field]: !t[field] } : t) } : ex);
+    
+    setExams(updatedExams);
+    updateCloudData('exams', updatedExams);
   };
 
   const deleteTopic = (examId, topicId) => {
-    setExams(exams.map(ex => ex.id === examId ? { ...ex, topics: ex.topics.filter(t => t.id !== topicId) } : ex));
+    const updatedExams = exams.map(ex => ex.id === examId ? { ...ex, topics: ex.topics.filter(t => t.id !== topicId) } : ex);
+    
+    setExams(updatedExams);
+    updateCloudData('exams', updatedExams);
   };
 
   const calculateDaysLeft = (targetDate) => {

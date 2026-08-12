@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 
-const CGPACalculator = () => {
-  const [courses, setCourses] = useState(() => {
-    const saved = localStorage.getItem('react_cgpa');
-    return saved ? JSON.parse(saved) : [];
-  });
+// 1. Accept the new cloud props from App.jsx
+const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
+  // 2. Initialize state with cloud data
+  const [courses, setCourses] = useState(cloudCGPA);
+
+  // 3. Keep local state synced if cloud data changes
+  useEffect(() => {
+    setCourses(cloudCGPA);
+  }, [cloudCGPA]);
 
   const [editingId, setEditingId] = useState(null);
   const [newName, setNewName] = useState('');
@@ -14,19 +18,23 @@ const CGPACalculator = () => {
   // Exact BITS Pilani Scale
   const gradeScale = { 'A': 10, 'A-': 9, 'B': 8, 'B-': 7, 'C': 6, 'C-': 5, 'D': 4, 'E': 2 };
 
-  useEffect(() => { localStorage.setItem('react_cgpa', JSON.stringify(courses)); }, [courses]);
-
   const handleSave = (e) => {
     e.preventDefault();
     if (!newName || !newCredits) return;
     const courseData = { id: editingId || Date.now(), name: newName, credits: Number(newCredits), grade: newGrade };
     
+    let updatedCourses;
     if (editingId) {
-      setCourses(courses.map(c => c.id === editingId ? courseData : c));
+      updatedCourses = courses.map(c => c.id === editingId ? courseData : c);
       setEditingId(null);
     } else {
-      setCourses([...courses, courseData]);
+      updatedCourses = [...courses, courseData];
     }
+    
+    // 4. Update local state AND push to the cloud universally
+    setCourses(updatedCourses);
+    updateCloudData('cgpa', updatedCourses);
+
     setNewName(''); setNewCredits(''); setNewGrade('A');
   };
 
@@ -36,7 +44,13 @@ const CGPACalculator = () => {
     setEditingId(c.id); setNewName(c.name); setNewCredits(c.credits); setNewGrade(c.grade);
   };
 
-  const deleteCourse = (id) => setCourses(courses.filter(c => c.id !== id));
+  const deleteCourse = (id) => {
+    const updatedCourses = courses.filter(c => c.id !== id);
+    // 4. Update local state AND push to the cloud universally
+    setCourses(updatedCourses);
+    updateCloudData('cgpa', updatedCourses);
+  };
+  
   const cancelEdit = () => { setEditingId(null); setNewName(''); setNewCredits(''); setNewGrade('A'); };
 
   const totalCredits = courses.reduce((sum, course) => sum + course.credits, 0);
