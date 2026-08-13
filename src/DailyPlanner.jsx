@@ -201,6 +201,92 @@ const DailyPlanner = ({ cloudPlanner = [], updateCloudData }) => {
   const visibleBlocksDaily = blocks.filter(b => isBlockVisibleOnDate(b, currentDate));
   const sortedPrintBlocksDaily = [...visibleBlocksDaily].sort((a, b) => a.startTime.localeCompare(b.startTime));
   
+  // --- CURRENT & NEXT BLOCK LOGIC ---
+  let currentBlock = null;
+  let nextBlock = null;
+
+  if (currentDate === realTodayStr) {
+    currentBlock = sortedPrintBlocksDaily.find(b => {
+      const sMins = timeToMins(b.startTime);
+      let eMins = timeToMins(b.endTime);
+      if (eMins <= sMins) eMins = sMins + 30; // Handle midnight wraps or errors securely
+      return sMins <= nowMins && eMins > nowMins;
+    });
+
+    nextBlock = sortedPrintBlocksDaily.find(b => {
+      const sMins = timeToMins(b.startTime);
+      return sMins > nowMins;
+    });
+  } else if (currentDate > realTodayStr) {
+    // If viewing a future date, there is no current block, next block is the first of the day
+    nextBlock = sortedPrintBlocksDaily.length > 0 ? sortedPrintBlocksDaily[0] : null;
+  }
+
+  // --- REUSABLE WIDGET RENDERER ---
+  const renderBlockCard = (block, type) => {
+    if (!block) {
+      return (
+        <div className="bg-[#1a1a1a] border border-gray-800 rounded-xl p-5 flex items-center justify-center h-full min-h-[140px] shadow-sm">
+          <p className="text-gray-500 text-sm italic text-center">
+            {type === 'Current' ? "No particular block going on right now." : "All scheduled blocks are over for today."}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-[#1a1a1a] border border-gray-800 rounded-xl p-5 shadow-sm hover:border-gray-700 transition-colors relative group h-full flex flex-col">
+        <div className="flex justify-between items-start mb-3">
+          <div className="flex items-center gap-3">
+            <span className="w-4 h-4 rounded-full shadow-sm shrink-0" style={{ backgroundColor: block.color }}></span>
+            <h4 className="text-white font-bold text-lg leading-tight pr-8">{block.title}</h4>
+          </div>
+          
+          <div className="flex items-center space-x-2 bg-black rounded-lg p-1 border border-gray-800 opacity-0 group-hover:opacity-100 transition-opacity absolute top-4 right-4">
+            <button onClick={() => handleEdit(block.id)} title="Edit Block" className="p-1.5 text-gray-400 hover:text-white transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+            </button>
+            <button onClick={() => handleDelete(block.id, currentDate, false)} title="Delete Occurrence" className="p-1.5 text-gray-400 hover:text-orange-400 transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          <div className="flex items-center text-gray-300 gap-2">
+            <span className="text-gray-500">📅</span> {new Date(currentDate).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+          </div>
+          <div className="flex items-center text-gray-300 gap-2">
+            <span className="text-gray-500">⏰</span> {block.startTime} - {block.endTime}
+          </div>
+          {block.repeat !== 'Once' && (
+            <div className="flex items-center text-indigo-400 font-medium gap-2">
+              <span className="text-gray-500">🔄</span> Repeats {block.repeat}
+            </div>
+          )}
+          {block.location && (
+            <div className="flex items-center text-gray-300 gap-2">
+              <span className="text-gray-500">📍</span> {block.location}
+            </div>
+          )}
+          {block.thingsToBring && (
+            <div className="flex items-center text-gray-300 gap-2">
+              <span className="text-gray-500">🎒</span> {block.thingsToBring}
+            </div>
+          )}
+        </div>
+
+        {block.description && (
+          <div className="mt-4 pt-4 border-t border-gray-800">
+            <p className="text-gray-400 text-sm whitespace-pre-wrap flex gap-2">
+              <span className="text-gray-500">📝</span> {block.description}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="w-full flex flex-col h-full space-y-6 relative">
       
@@ -309,6 +395,26 @@ const DailyPlanner = ({ cloudPlanner = [], updateCloudData }) => {
         {/* MAIN PLANNER VIEW */}
         <div className="col-span-1 lg:col-span-2 bg-[#121212] rounded-xl border border-gray-800 shadow-lg flex flex-col h-full overflow-hidden">
           
+          {/* --- NEW: CURRENT AND NEXT BLOCK WIDGETS --- */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 border-b border-gray-800 bg-black/40 shrink-0">
+            <div className="flex flex-col h-full">
+              <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Current Block
+              </h3>
+              <div className="flex-1">
+                {renderBlockCard(currentBlock, 'Current')}
+              </div>
+            </div>
+            <div className="flex flex-col h-full">
+              <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span> Next Block
+              </h3>
+              <div className="flex-1">
+                {renderBlockCard(nextBlock, 'Next')}
+              </div>
+            </div>
+          </div>
+
           {viewMode === 'list' && (
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-[#0a0a0a]">
               <h3 className="text-xl font-bold text-white mb-6 border-b border-gray-800 pb-3">
@@ -331,7 +437,6 @@ const DailyPlanner = ({ cloudPlanner = [], updateCloudData }) => {
                           <h4 className="text-white font-bold text-lg">{block.title}</h4>
                         </div>
                         
-                        {/* Hover Actions in List View */}
                         <div className="flex items-center space-x-2 bg-black rounded-lg p-1 border border-gray-800 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => handleEdit(block.id)} title="Edit Block" className="p-1.5 text-gray-400 hover:text-white transition-colors">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
@@ -424,7 +529,6 @@ const DailyPlanner = ({ cloudPlanner = [], updateCloudData }) => {
                       <div className="flex justify-between items-start">
                         <p className="text-white font-bold text-sm leading-tight drop-shadow-md truncate pr-2">{block.title}</p>
                         
-                        {/* Improved Daily View Hover Buttons */}
                         <div className="flex shrink-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded px-1 absolute top-2 right-2">
                           <button onClick={(e) => { e.stopPropagation(); handleEdit(block.id); }} title="Edit Block" className="text-white/70 hover:text-white p-1"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
                           <button onClick={(e) => { e.stopPropagation(); handleDelete(block.id, currentDate, false); }} title="Delete Occurrence" className="text-white/70 hover:text-red-400 p-1"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
@@ -470,7 +574,6 @@ const DailyPlanner = ({ cloudPlanner = [], updateCloudData }) => {
                             <p className="text-white/80 text-[9px] font-medium truncate">{block.startTime}</p>
                             {block.location && <span className="text-[8px] text-white/90 truncate mt-0.5 opacity-80">📍 {block.location}</span>}
 
-                            {/* Improved Weekly View Hover Buttons */}
                             <div className="flex shrink-0 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded px-0.5 absolute top-1 right-1">
                               <button onClick={(e) => { e.stopPropagation(); handleEdit(block.id); }} title="Edit Block" className="text-white/70 hover:text-white p-0.5"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
                               <button onClick={(e) => { e.stopPropagation(); handleDelete(block.id, dayStr, false); }} title="Delete Occurrence" className="text-white/70 hover:text-red-400 p-0.5"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
