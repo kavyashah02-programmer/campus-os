@@ -166,20 +166,21 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     return false;
   };
 
-  // --- SORTING LOGIC: Date first, then DeadlineTime/Time, then Creation ---
+  // --- SORTING LOGIC: Date -> Timeline (Time OR Deadline Time) -> Creation ---
   const selectedDateTasks = tasks
     .filter(t => isTaskVisibleOnDate(t, selectedDate))
     .sort((a, b) => {
+      // 1. Sort by Scheduled Date
       const dateA = a.date || '';
       const dateB = b.date || '';
       if (dateA !== dateB) return dateA.localeCompare(dateB);
 
-      const timeA = a.deadlineTime || a.time || '';
-      const timeB = b.deadlineTime || b.time || '';
-      if (timeA && timeB) return timeA.localeCompare(timeB);
-      if (timeA) return -1;
-      if (timeB) return 1;
+      // 2. Sort by Timeline (Uses 'Time' first, falls back to 'Deadline Time')
+      const timelineA = a.time || a.deadlineTime || '24:00';
+      const timelineB = b.time || b.deadlineTime || '24:00';
+      if (timelineA !== timelineB) return timelineA.localeCompare(timelineB);
 
+      // 3. Fallback to creation order
       return (a.createdAt || 0) - (b.createdAt || 0);
     });
   
@@ -410,12 +411,12 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
                             </h4>
                             
                             <div className="flex flex-wrap gap-2 mt-2">
-                              {/* FOOLPROOF DEADLINE RENDER */}
-                              {(task.deadline || task.deadlineTime) ? (
+                              {/* --- BULLETPROOF DEADLINE RENDERER --- */}
+                              {Boolean(task.deadline || task.deadlineTime) && (
                                 <span className="text-[10px] text-red-400 bg-red-900/20 border border-red-900/50 px-2 py-1 rounded shadow-sm font-bold flex items-center gap-1">
-                                  ⚠️ Due: {task.deadline ? task.deadline : ''} {task.deadline && task.deadlineTime ? 'at' : ''} {task.deadlineTime ? task.deadlineTime : ''}
+                                  ⚠️ Due: {[task.deadline, task.deadlineTime].filter(Boolean).join(' at ')}
                                 </span>
-                              ) : null}
+                              )}
                               
                               {task.time && <span className="text-[10px] text-gray-300 bg-gray-800 px-2 py-1 rounded border border-gray-700">🕒 {task.time}</span>}
                               {task.place && <span className="text-[10px] text-gray-300 bg-gray-800 px-2 py-1 rounded border border-gray-700">📍 {task.place}</span>}
@@ -498,8 +499,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
                     <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-1 pr-1">
                       {dayTasks.map(t => {
                          const isDone = t.completedDates ? t.completedDates.includes(dayStr) : t.completed;
-                         const hasDeadline = t.deadline || t.deadlineTime;
-                         const deadlineText = hasDeadline ? `Due: ${t.deadline || ''} ${t.deadline && t.deadlineTime ? 'at' : ''} ${t.deadlineTime || ''}\n` : '';
+                         const deadlineText = (t.deadline || t.deadlineTime) ? `Due: {[t.deadline, t.deadlineTime].filter(Boolean).join(' at ')}\n` : '';
                          const tooltip = `${t.title}\n${deadlineText}Left-click: Delete\nRight-click: Edit`;
                          return (
                           <div 
