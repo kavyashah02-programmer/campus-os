@@ -1,10 +1,29 @@
 import React, { useState, useEffect } from 'react';
 
 const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
-  const [tasks, setTasks] = useState(cloudTasks);
-  
+  // 1. MODIFIED: Initialize state from Local Storage to survive refreshes
+  const [tasks, setTasks] = useState(() => {
+    try {
+      const savedTasks = localStorage.getItem('taskManagerTasks');
+      if (savedTasks) {
+        return JSON.parse(savedTasks);
+      }
+    } catch (e) {
+      console.error("Failed to load tasks from local storage", e);
+    }
+    return cloudTasks;
+  });
+
+  // 2. ADDED: Automatically save to Local Storage whenever tasks change
   useEffect(() => {
-    setTasks(cloudTasks);
+    localStorage.setItem('taskManagerTasks', JSON.stringify(tasks));
+  }, [tasks]);
+  
+  // Keep cloud sync functionality if data arrives from a backend later
+  useEffect(() => {
+    if (cloudTasks && cloudTasks.length > 0) {
+      setTasks(cloudTasks);
+    }
   }, [cloudTasks]);
   
   const [editingId, setEditingId] = useState(null);
