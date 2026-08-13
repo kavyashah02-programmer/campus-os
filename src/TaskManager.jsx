@@ -45,11 +45,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
       });
     }
   }, [cloudTasks, isLoaded]);
-
-  // --- Keep everything from here down exactly the same ---
-  const [editingId, setEditingId] = useState(null);
   // ... rest of your state variables
-  
   const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
