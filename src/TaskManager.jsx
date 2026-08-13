@@ -5,7 +5,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   // 2. Initialize state with the cloud data
   const [tasks, setTasks] = useState(cloudTasks);
   
-  // 3. Keep local state synced if cloud data changes (e.g., from another device)
+  // 3. Keep local state synced if cloud data changes
   useEffect(() => {
     setTasks(cloudTasks);
   }, [cloudTasks]);
@@ -15,7 +15,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState('');
   const [deadline, setDeadline] = useState('');
-  const [deadlineTime, setDeadlineTime] = useState(''); // NEW: Deadline Time state
+  const [deadlineTime, setDeadlineTime] = useState(''); 
   const [desc, setDesc] = useState('');
   const [place, setPlace] = useState('');
   const [thingsToBring, setThingsToBring] = useState('');
@@ -27,7 +27,6 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // Generate a unique ID since we aren't using Firestore's auto-ID here anymore
   const generateId = () => Date.now().toString() + Math.random().toString(36).slice(2, 9);
 
   const handleImageUpload = (e) => {
@@ -74,9 +73,8 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
       updatedTasks.push(newTask);
     }
     
-    // Update local state and push to the cloud universally
     setTasks(updatedTasks);
-    updateCloudData('tasks', updatedTasks);
+    if (updateCloudData) updateCloudData('tasks', updatedTasks);
     
     setTitle(''); setTime(''); setDeadline(''); setDeadlineTime(''); setDesc(''); setPlace(''); setThingsToBring(''); setImage(null); setRepeat('none');
   };
@@ -86,8 +84,8 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     if (!t) return;
     
     setEditingId(t.id);
-    setTitle(t.title); setDate(t.date); setTime(t.time || ''); setDeadline(t.deadline || ''); 
-    setDeadlineTime(t.deadlineTime || ''); // Load deadline time
+    setTitle(t.title); setDate(t.date); setTime(t.time || ''); 
+    setDeadline(t.deadline || ''); setDeadlineTime(t.deadlineTime || ''); 
     setDesc(t.desc || ''); setPlace(t.place || ''); setThingsToBring(t.thingsToBring || ''); 
     setRepeat(t.repeat || 'none'); setCategory(t.category || 'Academic');
     setColor(t.color || '#3b82f6'); setImage(t.image || null);
@@ -95,7 +93,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // --- TOGGLE (Complete) ---
+  // --- TOGGLE ---
   const toggleTask = (id, targetDate) => {
     const updatedTasks = tasks.map(t => {
       if (t.id === id) {
@@ -109,7 +107,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     });
 
     setTasks(updatedTasks);
-    updateCloudData('tasks', updatedTasks);
+    if (updateCloudData) updateCloudData('tasks', updatedTasks);
   };
 
   // --- DELETE ---
@@ -121,10 +119,8 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
       let updatedTasks;
 
       if ((t.repeat === 'none' || !t.repeat) && t.date === targetDate) {
-        // Completely destroy the one-time task
         updatedTasks = tasks.filter(x => x.id !== id);
       } else {
-        // Just hide it for this specific date
         updatedTasks = tasks.map(x => {
           if (x.id === id) {
             return { ...x, excludedDates: [...(x.excludedDates || []), targetDate] };
@@ -134,7 +130,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
       }
 
       setTasks(updatedTasks);
-      updateCloudData('tasks', updatedTasks);
+      if (updateCloudData) updateCloudData('tasks', updatedTasks);
     }
   };
 
@@ -209,13 +205,11 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
 
       pendingTasks.forEach((pt, index) => {
         if (pt.repeat === 'none' || !pt.repeat) {
-          // Simply change the date of the existing one-time task
           const idx = updatedTasks.findIndex(x => x.id === pt.id);
           if (idx > -1) {
             updatedTasks[idx] = { ...updatedTasks[idx], date: nextDateStr };
           }
         } else {
-          // Exclude it from today, and clone it for tomorrow
           const idx = updatedTasks.findIndex(x => x.id === pt.id);
           if (idx > -1) {
             updatedTasks[idx] = { 
@@ -226,7 +220,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
           
           const clone = {
             ...pt,
-            id: generateId() + index, // Ensure unique ID for clones
+            id: generateId() + index, 
             createdAt: Date.now(),
             date: nextDateStr,
             repeat: 'none',
@@ -238,7 +232,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
       });
 
       setTasks(updatedTasks);
-      updateCloudData('tasks', updatedTasks);
+      if (updateCloudData) updateCloudData('tasks', updatedTasks);
       setSelectedDate(nextDateStr);
     }
   };
@@ -299,7 +293,6 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
               </div>
             </div>
 
-            {/* NEW: Deadline & Deadline Time Row */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Deadline Date</label>
@@ -420,11 +413,13 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
                             </h4>
                             
                             <div className="flex flex-wrap gap-2 mt-2">
-                              {task.deadline && (
+                              {/* FIXED: Robust check to ensure badge shows if either deadline or deadlineTime exists */}
+                              {(task.deadline || task.deadlineTime) && (
                                 <span className="text-[10px] text-red-400 bg-red-900/20 border border-red-900/50 px-2 py-1 rounded shadow-sm">
-                                  ⚠️ Due: {task.deadline} {task.deadlineTime ? `at ${task.deadlineTime}` : ''}
+                                  ⚠️ Due: {task.deadline && task.deadlineTime ? `${task.deadline} at ${task.deadlineTime}` : task.deadline || task.deadlineTime}
                                 </span>
                               )}
+                              
                               {task.time && <span className="text-[10px] text-gray-300 bg-gray-800 px-2 py-1 rounded border border-gray-700">🕒 {task.time}</span>}
                               {task.place && <span className="text-[10px] text-gray-300 bg-gray-800 px-2 py-1 rounded border border-gray-700">📍 {task.place}</span>}
                               {task.thingsToBring && <span className="text-[10px] text-emerald-400 bg-emerald-900/20 border border-emerald-900/50 px-2 py-1 rounded shadow-sm">🎒 {task.thingsToBring}</span>}
@@ -506,10 +501,12 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
                     <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-1 pr-1">
                       {dayTasks.map(t => {
                          const isDone = t.completedDates ? t.completedDates.includes(dayStr) : t.completed;
+                         // Format the tooltip so it clearly shows the deadline details
+                         const tooltip = `${t.title}\n${(t.deadline || t.deadlineTime) ? `Due: ${t.deadline && t.deadlineTime ? `${t.deadline} at ${t.deadlineTime}` : t.deadline || t.deadlineTime}\n` : ''}Left-click: Delete\nRight-click: Edit`;
                          return (
                           <div 
                             key={t.id} 
-                            title={`${t.title} \nLeft-click: Delete \nRight-click: Edit`}
+                            title={tooltip}
                             onClick={(e) => { e.stopPropagation(); deleteTask(t.id, dayStr); }}
                             onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); handleEdit(t.id); }}
                             className={`text-[9px] px-1.5 py-1 rounded truncate border border-l-2 font-medium shadow-sm cursor-pointer transition-opacity hover:opacity-80 ${isDone ? 'opacity-30 line-through text-gray-500' : 'text-white'}`} 
