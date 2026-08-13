@@ -143,18 +143,24 @@ function App() {
     setCloudData(prev => ({ ...prev, [databaseKey]: newData }));
   };
   
-  // Auto-sync dashboard habits & spotify to cloud when changed
+  // Auto-sync dashboard habits & spotify to cloud when changed (Guarded against data wipe on refresh)
   useEffect(() => {
-    if (user && Object.keys(habitLogs).length > 0) updateCloudData('habitLogs', habitLogs);
-  }, [habitLogs, user]);
+    if (user && !isDataLoading && Object.keys(habitLogs).length > 0) {
+      updateCloudData('habitLogs', habitLogs);
+    }
+  }, [habitLogs, user, isDataLoading]);
 
   useEffect(() => {
-    if (user && habits.length > 0) updateCloudData('habits', habits);
-  }, [habits, user]);
+    if (user && !isDataLoading && habits.length > 0) {
+      updateCloudData('habits', habits);
+    }
+  }, [habits, user, isDataLoading]);
 
   useEffect(() => {
-    if (user && spotifyEmbed) updateCloudData('spotifyEmbed', spotifyEmbed);
-  }, [spotifyEmbed, user]);
+    if (user && !isDataLoading && spotifyEmbed) {
+      updateCloudData('spotifyEmbed', spotifyEmbed);
+    }
+  }, [spotifyEmbed, user, isDataLoading]);
 
 
   // --------------------------------------------------------
@@ -347,10 +353,13 @@ function App() {
   // --------------------------------------------------------
   // RENDER BLOCKS
   // --------------------------------------------------------
-  if (isCheckingAuth) {
+  
+  // Guard 1: The Loading Gate
+  if (isCheckingAuth || (user && isDataLoading)) {
     return (
-      <div className="flex h-screen bg-black items-center justify-center font-sans">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="flex h-screen bg-black items-center justify-center font-sans flex-col">
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-400 text-sm font-bold tracking-widest uppercase animate-pulse">Syncing Master Cloud...</p>
       </div>
     );
   }
