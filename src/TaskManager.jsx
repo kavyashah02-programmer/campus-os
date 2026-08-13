@@ -1,30 +1,54 @@
 import React, { useState, useEffect } from 'react';
 
 const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
-  // 1. MODIFIED: Initialize state from Local Storage to survive refreshes
-  const [tasks, setTasks] = useState(() => {
+  const [tasks, setTasks] = useState([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // 1. Load from LocalStorage securely AFTER the component mounts (fixes SSR & hydration issues)
+  useEffect(() => {
     try {
       const savedTasks = localStorage.getItem('taskManagerTasks');
       if (savedTasks) {
-        return JSON.parse(savedTasks);
+        setTasks(JSON.parse(savedTasks));
+      } else if (cloudTasks && cloudTasks.length > 0) {
+        setTasks(cloudTasks);
       }
     } catch (e) {
       console.error("Failed to load tasks from local storage", e);
     }
-    return cloudTasks;
-  });
+    setIsLoaded(true); // Mark as loaded so we don't accidentally overwrite storage
+  }, []);
 
-  // 2. ADDED: Automatically save to Local Storage whenever tasks change
+  // 2. Save to LocalStorage whenever tasks change (but ONLY after the initial load is done)
   useEffect(() => {
-    localStorage.setItem('taskManagerTasks', JSON.stringify(tasks));
-  }, [tasks]);
-  
-  // Keep cloud sync functionality if data arrives from a backend later
-  useEffect(() => {
-    if (cloudTasks && cloudTasks.length > 0) {
-      setTasks(cloudTasks);
+    if (isLoaded) {
+      localStorage.setItem('taskManagerTasks', JSON.stringify(tasks));
     }
-  }, [cloudTasks]);
+  }, [tasks, isLoaded]);
+  
+  // 3. Intelligently merge incoming cloud data instead of blindly overwriting local tasks
+  useEffect(() => {
+    if (isLoaded && cloudTasks && cloudTasks.length > 0) {
+      setTasks(prevTasks => {
+        const mergedTasks = [...prevTasks];
+        let hasNewTasks = false;
+        
+        cloudTasks.forEach(cloudTask => {
+          // Only add the cloud task if it doesn't already exist in our local state
+          if (!mergedTasks.some(t => t.id === cloudTask.id)) {
+            mergedTasks.push(cloudTask);
+            hasNewTasks = true;
+          }
+        });
+        
+        return hasNewTasks ? mergedTasks : prevTasks;
+      });
+    }
+  }, [cloudTasks, isLoaded]);
+
+  // --- Keep everything from here down exactly the same ---
+  const [editingId, setEditingId] = useState(null);
+  // ... rest of your state variables
   
   const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState('');
