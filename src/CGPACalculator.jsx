@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocalStorageSync } from './hooks/useLocalStorageSync'; // Ensure this path matches
+import { useLocalStorageSync } from './useLocalStorageSync'; // Ensure this path matches
 
 const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
   const [courses, setCourses] = useLocalStorageSync('cgpaCalculatorData', cloudCGPA);
