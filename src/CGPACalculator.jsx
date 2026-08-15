@@ -1,14 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useLocalStorageSync } from './hooks/useLocalStorageSync'; // Ensure this path matches
 
-// 1. Accept the new cloud props from App.jsx
 const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
-  // 2. Initialize state with cloud data
-  const [courses, setCourses] = useState(cloudCGPA);
-
-  // 3. Keep local state synced if cloud data changes
-  useEffect(() => {
-    setCourses(cloudCGPA);
-  }, [cloudCGPA]);
+  // 1. Replaced the old state and useEffects with your custom hook!
+  const [courses, setCourses] = useLocalStorageSync('cgpaCalculatorData', cloudCGPA);
 
   const [editingId, setEditingId] = useState(null);
   const [newName, setNewName] = useState('');
@@ -18,6 +13,9 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
   // Exact BITS Pilani Scale
   const gradeScale = { 'A': 10, 'A-': 9, 'B': 8, 'B-': 7, 'C': 6, 'C-': 5, 'D': 4, 'E': 2 };
 
+  // 2. CRITICAL FIX: Always guarantee an array to prevent the White Screen of Death
+  const safeCourses = Array.isArray(courses) ? courses : [];
+
   const handleSave = (e) => {
     e.preventDefault();
     if (!newName || !newCredits) return;
@@ -25,36 +23,36 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
     
     let updatedCourses;
     if (editingId) {
-      updatedCourses = courses.map(c => c.id === editingId ? courseData : c);
+      updatedCourses = safeCourses.map(c => c.id === editingId ? courseData : c);
       setEditingId(null);
     } else {
-      updatedCourses = [...courses, courseData];
+      updatedCourses = [...safeCourses, courseData];
     }
     
-    // 4. Update local state AND push to the cloud universally
+    // Update local state AND push to the cloud universally
     setCourses(updatedCourses);
-    updateCloudData('cgpa', updatedCourses);
+    if (updateCloudData) updateCloudData('cgpa', updatedCourses);
 
     setNewName(''); setNewCredits(''); setNewGrade('A');
   };
 
   const handleEdit = (id) => {
-    const c = courses.find(x => x.id === id);
+    const c = safeCourses.find(x => x.id === id);
     if (!c) return;
     setEditingId(c.id); setNewName(c.name); setNewCredits(c.credits); setNewGrade(c.grade);
   };
 
   const deleteCourse = (id) => {
-    const updatedCourses = courses.filter(c => c.id !== id);
-    // 4. Update local state AND push to the cloud universally
+    const updatedCourses = safeCourses.filter(c => c.id !== id);
     setCourses(updatedCourses);
-    updateCloudData('cgpa', updatedCourses);
+    if (updateCloudData) updateCloudData('cgpa', updatedCourses);
   };
   
   const cancelEdit = () => { setEditingId(null); setNewName(''); setNewCredits(''); setNewGrade('A'); };
 
-  const totalCredits = courses.reduce((sum, course) => sum + course.credits, 0);
-  const totalPoints = courses.reduce((sum, course) => sum + (course.credits * gradeScale[course.grade]), 0);
+  // 3. Now perfectly safe to run reductions
+  const totalCredits = safeCourses.reduce((sum, course) => sum + course.credits, 0);
+  const totalPoints = safeCourses.reduce((sum, course) => sum + (course.credits * gradeScale[course.grade]), 0);
   const cgpa = totalCredits === 0 ? 0 : (totalPoints / totalCredits).toFixed(2);
 
   return (
@@ -103,7 +101,7 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
             <span className="text-xs font-bold text-gray-400 bg-gray-800 px-3 py-1 rounded-full">Total Credits: {totalCredits}</span>
           </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
-            {courses.map(course => (
+            {safeCourses.map(course => (
               <div key={course.id} className="bg-black border border-gray-800 p-4 rounded-xl flex items-center justify-between group">
                 <div>
                   <h3 className="text-white font-bold">{course.name}</h3>

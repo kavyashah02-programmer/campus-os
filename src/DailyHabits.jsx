@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useLocalStorageSync } from './hooks/useLocalStorageSync'; // Ensure this path matches
 
 // 1. Accept the new cloud props from App.jsx
 const DailyHabits = ({ cloudDailyHabits = [], updateCloudData }) => {
@@ -12,32 +13,27 @@ const DailyHabits = ({ cloudDailyHabits = [], updateCloudData }) => {
     { id: 5, text: "Focus for 25 minutes (Pomodoro)", completed: false },
   ];
 
-  // 2. Initialize state with cloud data (fallback to defaults if cloud is empty)
-  const [habits, setHabits] = useState(
-    cloudDailyHabits.length > 0 ? cloudDailyHabits : defaultHabits
-  );
+  // 2. Replaced the old state and useEffects with your custom hook!
+  const [habits, setHabits] = useLocalStorageSync('dailyHabitsData', cloudDailyHabits);
 
-  // 3. Keep local state synced if cloud data changes (e.g., toggled on your phone)
-  useEffect(() => {
-    if (cloudDailyHabits.length > 0) {
-      setHabits(cloudDailyHabits);
-    }
-  }, [cloudDailyHabits]);
+  // 3. CRITICAL FIX: Guarantee an array to prevent crashes. 
+  // If the cloud is null, it loads defaults. If you purposefully deleted all habits, it safely stays as an empty array [].
+  const safeHabits = Array.isArray(habits) ? habits : defaultHabits;
 
   // 4. The Logic - Toggle and Sync
   const toggleHabit = (id) => {
-    const updatedHabits = habits.map(habit => 
+    const updatedHabits = safeHabits.map(habit => 
       habit.id === id ? { ...habit, completed: !habit.completed } : habit
     );
     
     // Update local state AND push to the cloud universally
     setHabits(updatedHabits);
-    updateCloudData('dailyHabits', updatedHabits);
+    if (updateCloudData) updateCloudData('dailyHabits', updatedHabits);
   };
 
-  // Automatically calculate progress based on the checked boxes
-  const completedCount = habits.filter(h => h.completed).length;
-  const progressPercentage = habits.length === 0 ? 0 : Math.round((completedCount / habits.length) * 100);
+  // Automatically calculate progress based on the checked boxes safely
+  const completedCount = safeHabits.filter(h => h.completed).length;
+  const progressPercentage = safeHabits.length === 0 ? 0 : Math.round((completedCount / safeHabits.length) * 100);
 
   // 5. The UI
   return (
@@ -63,7 +59,7 @@ const DailyHabits = ({ cloudDailyHabits = [], updateCloudData }) => {
 
       {/* Checklist */}
       <div className="space-y-3 flex-1">
-        {habits.map((habit) => (
+        {safeHabits.map((habit) => (
           <label 
             key={habit.id} 
             className="flex items-center space-x-3 cursor-pointer group p-2 hover:bg-[#1a1a1a] rounded-lg transition-colors"

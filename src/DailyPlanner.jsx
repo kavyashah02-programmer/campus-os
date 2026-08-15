@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocalStorageSync } from './hooks/useLocalStorageSync'; // Ensure this path matches where you saved the file!
+import { useLocalStorageSync } from './useLocalStorageSync'; // Ensure this path matches where you saved the file!
 
 // 1. Accept the new cloud props from App.jsx
 const DailyPlanner = ({ cloudPlanner = [], updateCloudData }) => {
