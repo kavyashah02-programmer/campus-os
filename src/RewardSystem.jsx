@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 
-// 1. Accept the new cloud props from App.jsx
 const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
   // --- 11 Categories (7 Multi-Tier, 4 Gold-Only) ---
   const categories = [
@@ -79,35 +78,43 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
     }
   ];
 
-  // --- Unified State Management ---
   const defaultState = { progress: {}, cheats: {}, claimed: [] };
   categories.forEach(c => {
     defaultState.progress[c.id] = 0;
     defaultState.cheats[c.id] = 0;
   });
 
-  // 2. Initialize with Cloud Data
-  const [data, setData] = useState(
-    cloudRewards && Object.keys(cloudRewards).length > 0 ? cloudRewards : defaultState
-  );
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [data, setData] = useState(defaultState);
 
-  // 3. Keep local state synced if cloud data changes
+  // 1. Load Data Securely
   useEffect(() => {
-    if (cloudRewards && Object.keys(cloudRewards).length > 0) {
-      setData(cloudRewards);
+    try {
+      const savedData = localStorage.getItem('rewardSystemData');
+      if (savedData) {
+        setData(JSON.parse(savedData));
+      } else if (cloudRewards && Object.keys(cloudRewards).length > 0) {
+        setData(cloudRewards);
+      }
+    } catch (e) {
+      console.error("Failed to load rewards from local storage", e);
     }
+    setIsLoaded(true);
   }, [cloudRewards]);
 
-  // CRITICAL FIX: Guarantee sub-objects exist so rendering never triggers a White Screen of Death
+  // 2. Save Data on Change
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem('rewardSystemData', JSON.stringify(data));
+    }
+  }, [data, isLoaded]);
+
   const safeData = {
     progress: data?.progress || {},
     cheats: data?.cheats || {},
     claimed: Array.isArray(data?.claimed) ? data.claimed : []
   };
 
-  // --- Core Engine Functions ---
-
-  // 1. Log a productive day
   const handleLog = (groupId) => {
     setData(prev => {
       const prevProgress = prev?.progress || {};
@@ -115,32 +122,26 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
         ...prev,
         progress: { ...prevProgress, [groupId]: (prevProgress[groupId] || 0) + 1 }
       };
-      // Push to Cloud
       if (updateCloudData) updateCloudData('rewards', newData);
       return newData;
     });
   };
 
-  // 2. Claim a specific tier
   const handleClaim = (groupId, tier, isFinalTier) => {
     setData(prev => {
       let newClaimed = [...(Array.isArray(prev?.claimed) ? prev.claimed : []), tier.id];
       let newProgress = { ...(prev?.progress || {}) };
       let newCheats = { ...(prev?.cheats || {}) };
 
-      // Award specific cheat days
       newCheats[groupId] = (newCheats[groupId] || 0) + tier.cheats;
 
-      // REJUVENATION LOGIC: If this is Tier III (or a Gold-only task), it resets the whole category
       if (isFinalTier) {
         newProgress[groupId] = 0;
-        // Unclaim all tiers belonging to this group
         const groupTierIds = categories.find(c => c.id === groupId).tiers.map(t => t.id);
         newClaimed = newClaimed.filter(id => !groupTierIds.includes(id));
       }
 
       const newData = { progress: newProgress, cheats: newCheats, claimed: newClaimed };
-      // Push to Cloud
       if (updateCloudData) updateCloudData('rewards', newData);
       return newData;
     });
@@ -148,7 +149,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
     alert(`🎉 Target hit! You earned: ${tier.reward}\n\n${tier.cheats > 0 ? `You now have ${tier.cheats} new Cheat Day(s) for this specific task to protect your streak!` : ''}`);
   };
 
-  // 3. Missed a day / Use Cheat Day
   const handleMissedDay = (groupId) => {
     const availableCheats = safeData.cheats[groupId] || 0;
     
@@ -162,7 +162,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
             cheats: { ...prevCheats, [groupId]: Math.max(0, (prevCheats[groupId] || 1) - 1) },
             progress: { ...prevProgress, [groupId]: (prevProgress[groupId] || 0) + 1 }
           };
-          // Push to Cloud
           if (updateCloudData) updateCloudData('rewards', newData);
           return newData;
         });
@@ -179,7 +178,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
             progress: { ...prevProgress, [groupId]: 0 },
             claimed: prevClaimed.filter(id => !groupTierIds.includes(id))
           };
-          // Push to Cloud
           if (updateCloudData) updateCloudData('rewards', newData);
           return newData;
         });
@@ -187,11 +185,10 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
     }
   };
 
-  // --- UI Helpers ---
   const getLevelColor = (level) => {
     if (level === 'Gold') return 'text-yellow-400 bg-yellow-900/20 border-yellow-500/50';
     if (level === 'Silver') return 'text-gray-300 bg-gray-700/20 border-gray-500/50';
-    return 'text-orange-500 bg-orange-900/20 border-orange-700/50'; // Bronze
+    return 'text-orange-500 bg-orange-900/20 border-orange-700/50'; 
   };
 
   return (
@@ -207,18 +204,14 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           
           {categories.map((cat) => {
-            // Using safeData to prevent rendering crashes
             const currentProgress = safeData.progress[cat.id] || 0;
             const availableCheats = safeData.cheats[cat.id] || 0;
             
-            // Find the active target for the progress bar (first unclaimed tier)
             const activeTier = cat.tiers.find(t => !safeData.claimed.includes(t.id)) || cat.tiers[cat.tiers.length - 1];
             const pct = Math.min(100, (currentProgress / activeTier.target) * 100);
 
             return (
               <div key={cat.id} className="bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex flex-col h-full">
-                
-                {/* Header */}
                 <div className="flex justify-between items-start mb-6">
                   <div className="flex gap-4">
                     <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl border border-gray-700 bg-black shadow-inner shrink-0">
@@ -230,7 +223,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
                     </div>
                   </div>
                   
-                  {/* Task-Specific Cheat Badge */}
                   {cat.tiers.length > 1 && (
                     <div className={`px-3 py-1.5 rounded-lg border flex flex-col items-center shrink-0 ${availableCheats > 0 ? 'bg-red-900/20 border-red-500/50 text-red-400' : 'bg-gray-900/50 border-gray-700 text-gray-500'}`}>
                       <span className="text-[9px] font-bold uppercase tracking-wider">Cheat Days</span>
@@ -239,7 +231,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
                   )}
                 </div>
 
-                {/* Tiers List */}
                 <div className="flex-1 space-y-3 mb-6">
                   {cat.tiers.map((tier, index) => {
                     const isClaimed = safeData.claimed.includes(tier.id);
@@ -269,7 +260,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
                   })}
                 </div>
 
-                {/* Progress Bar & Buttons */}
                 <div className="mt-auto border-t border-gray-800 pt-5 flex items-center gap-6">
                   <div className="flex-1">
                     <div className="flex justify-between text-xs font-bold mb-2">
