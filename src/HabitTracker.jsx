@@ -1,9 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import ReactApexChart from 'react-apexcharts';
 
-// 1. Accept updateCloudData alongside the state props from App.jsx
 const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudData }) => {
-  
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // 1. Fetch from LocalStorage and update App.jsx props
+  useEffect(() => {
+    try {
+      const savedHabits = localStorage.getItem('habitTracker_habitsData');
+      const savedLogs = localStorage.getItem('habitTracker_logsData');
+
+      if (savedHabits) {
+        setHabits(JSON.parse(savedHabits));
+      }
+      if (savedLogs) {
+        setHabitLogs(JSON.parse(savedLogs));
+      }
+    } catch (e) {
+      console.error("Failed to load habit data from local storage", e);
+    }
+    setIsLoaded(true);
+  }, [setHabits, setHabitLogs]);
+
+  // 2. Save any changes back to LocalStorage securely
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem('habitTracker_habitsData', JSON.stringify(habits));
+      localStorage.setItem('habitTracker_logsData', JSON.stringify(habitLogs));
+    }
+  }, [habits, habitLogs, isLoaded]);
+
   // CRITICAL FIX: Guarantee an array and object to prevent White Screen crashes
   const safeHabits = Array.isArray(habits) ? habits : [];
   const safeHabitLogs = habitLogs || {};
@@ -18,14 +44,12 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
   const [newHabitText, setNewHabitText] = useState('');
   const [selectedAnalysisHabit, setSelectedAnalysisHabit] = useState('');
 
-  // Set default selected habit for analysis chart on load
   useEffect(() => {
     if (safeHabits.length > 0 && !selectedAnalysisHabit) {
       setSelectedAnalysisHabit(safeHabits[0].id.toString());
     }
   }, [safeHabits, selectedAnalysisHabit]);
 
-  // --- 2. Update toggle to push to the cloud ---
   const toggleHabit = (id) => {
     const dayLogs = safeHabitLogs[logDate] || {};
     const newHabitLogs = { 
@@ -33,11 +57,10 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
       [logDate]: { ...dayLogs, [id]: !dayLogs[id] } 
     };
     
-    setHabitLogs(newHabitLogs); // Update Dashboard UI immediately
-    if (updateCloudData) updateCloudData('habitLogs', newHabitLogs); // Push to Firebase
+    setHabitLogs(newHabitLogs); 
+    if (updateCloudData) updateCloudData('habitLogs', newHabitLogs); 
   };
 
-  // --- 3. Update add to push to the cloud ---
   const addHabit = (e) => {
     e.preventDefault();
     if (!newHabitText.trim()) return;
@@ -49,7 +72,6 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
     setNewHabitText('');
   };
 
-  // --- 4. Update delete to push to the cloud ---
   const deleteHabit = (id) => {
     if(window.confirm("Delete this habit entirely?")) {
       const newHabits = safeHabits.filter(h => h.id !== id);
