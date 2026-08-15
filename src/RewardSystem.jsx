@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 
 const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => {
   
-  // --- Re-structured Default Categories to support custom rewards ---
+  // --- THE ULTIMATE SOURCE OF TRUTH ---
+  // You can change these anytime. New users and existing users will instantly see 
+  // these updates, UNLESS they specifically customized that exact card themselves.
   const defaultCategories = [
     {
       id: 'wakeup', name: 'Rise Master', icon: '🌅', desc: 'Wake up at 5:30 AM',
@@ -79,9 +81,8 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
     }
   ];
 
-  const defaultState = { progress: {}, cheats: {}, claimed: [], categories: defaultCategories };
-  
-  // Initialize Defaults
+  // Notice how "categories" is no longer part of the saved state. We only save "userOverrides".
+  const defaultState = { progress: {}, cheats: {}, claimed: [], userOverrides: {} };
   defaultCategories.forEach(c => {
     defaultState.progress[c.id] = 0;
     defaultState.cheats[c.id] = 0;
@@ -89,22 +90,25 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
 
   const [isLoaded, setIsLoaded] = useState(false);
   const [data, setData] = useState(defaultState);
-  const [editingCategory, setEditingCategory] = useState(null); // Tracks which card is in edit mode
+  const [editingCategory, setEditingCategory] = useState(null); 
 
   // 1. Load Data Securely
   useEffect(() => {
     try {
       const savedData = localStorage.getItem('rewardSystemData');
-      if (savedData) {
-        const parsed = JSON.parse(savedData);
-        // Fallback injection for users who saved before categories became editable
-        if (!parsed.categories) parsed.categories = defaultCategories;
-        setData(parsed);
-      } else if (cloudRewards && Object.keys(cloudRewards).length > 0) {
-        const cloudMerged = { ...cloudRewards };
-        if (!cloudMerged.categories) cloudMerged.categories = defaultCategories;
-        setData(cloudMerged);
+      let parsed = savedData ? JSON.parse(savedData) : null;
+      let cloudMerged = null;
+      
+      if (cloudRewards && Object.keys(cloudRewards).length > 0) {
+        cloudMerged = { ...cloudRewards };
       }
+
+      let finalData = parsed || cloudMerged || defaultState;
+
+      // Ensure userOverrides object exists
+      if (!finalData.userOverrides) finalData.userOverrides = {};
+
+      setData(finalData);
     } catch (e) {
       console.error("Failed to load rewards from local storage", e);
     }
@@ -114,7 +118,10 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
   // 2. Save Data on Change
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem('rewardSystemData', JSON.stringify(data));
+      // To save space, we strip out any old 'categories' array from previous versions if it exists.
+      const dataToSave = { ...data };
+      delete dataToSave.categories; 
+      localStorage.setItem('rewardSystemData', JSON.stringify(dataToSave));
     }
   }, [data, isLoaded]);
 
@@ -122,8 +129,26 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
     progress: data?.progress || {},
     cheats: data?.cheats || {},
     claimed: Array.isArray(data?.claimed) ? data.claimed : [],
-    categories: Array.isArray(data?.categories) ? data.categories : defaultCategories
+    userOverrides: data?.userOverrides || {}
   };
+
+  // --- THE MERGE ENGINE (Overrides Pattern) ---
+  // This takes your React code (Source of Truth) and layers the user's specific customizations on top!
+  const activeCategories = defaultCategories.map(cat => {
+    const override = safeData.userOverrides[cat.id];
+    if (!override) return cat; // If user hasn't edited this, use the fresh default!
+    
+    return {
+      ...cat,
+      name: override.name ?? cat.name,
+      icon: override.icon ?? cat.icon,
+      desc: override.desc ?? cat.desc,
+      tiers: cat.tiers.map(t => ({
+        ...t,
+        customReward: override.tiers?.[t.id]?.customReward ?? t.customReward
+      }))
+    };
+  });
 
   // --- Core Engine Functions ---
 
@@ -134,7 +159,11 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
         ...prev,
         progress: { ...prevProgress, [groupId]: (prevProgress[groupId] || 0) + 1 }
       };
-      if (updateCloudData) updateCloudData('rewards', newData);
+      if (updateCloudData) {
+         const cleanData = { ...newData };
+         delete cleanData.categories;
+         updateCloudData('rewards', cleanData);
+      }
       return newData;
     });
   };
@@ -149,12 +178,16 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
 
       if (isFinalTier) {
         newProgress[groupId] = 0;
-        const groupTierIds = safeData.categories.find(c => c.id === groupId).tiers.map(t => t.id);
+        const groupTierIds = activeCategories.find(c => c.id === groupId).tiers.map(t => t.id);
         newClaimed = newClaimed.filter(id => !groupTierIds.includes(id));
       }
 
       const newData = { ...prev, progress: newProgress, cheats: newCheats, claimed: newClaimed };
-      if (updateCloudData) updateCloudData('rewards', newData);
+      if (updateCloudData) {
+         const cleanData = { ...newData };
+         delete cleanData.categories;
+         updateCloudData('rewards', cleanData);
+      }
       return newData;
     });
 
@@ -171,10 +204,13 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
           const prevCheats = prev?.cheats || {};
           const newData = {
             ...prev,
-            // Only consume the cheat, do NOT increment progress.
             cheats: { ...prevCheats, [groupId]: Math.max(0, (prevCheats[groupId] || 1) - 1) },
           };
-          if (updateCloudData) updateCloudData('rewards', newData);
+          if (updateCloudData) {
+             const cleanData = { ...newData };
+             delete cleanData.categories;
+             updateCloudData('rewards', cleanData);
+          }
           return newData;
         });
       }
@@ -183,27 +219,47 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
         setData(prev => {
           const prevProgress = prev?.progress || {};
           const prevClaimed = Array.isArray(prev?.claimed) ? prev.claimed : [];
-          const groupTierIds = safeData.categories.find(c => c.id === groupId).tiers.map(t => t.id);
+          const groupTierIds = activeCategories.find(c => c.id === groupId).tiers.map(t => t.id);
           
           const newData = {
             ...prev,
             progress: { ...prevProgress, [groupId]: 0 },
             claimed: prevClaimed.filter(id => !groupTierIds.includes(id))
           };
-          if (updateCloudData) updateCloudData('rewards', newData);
+          if (updateCloudData) {
+             const cleanData = { ...newData };
+             delete cleanData.categories;
+             updateCloudData('rewards', cleanData);
+          }
           return newData;
         });
       }
     }
   };
 
-  // --- Edit System Helpers ---
+  // --- Edit System Helpers (Saving to Overrides) ---
   const saveCategoryEdit = (e) => {
     e.preventDefault();
     setData(prev => {
-      const updatedCategories = prev.categories.map(c => c.id === editingCategory.id ? editingCategory : c);
-      const newData = { ...prev, categories: updatedCategories };
-      if (updateCloudData) updateCloudData('rewards', newData);
+      // Build an override object containing ONLY the user's custom changes
+      const categoryOverride = {
+        name: editingCategory.name,
+        icon: editingCategory.icon,
+        desc: editingCategory.desc,
+        tiers: editingCategory.tiers.reduce((acc, tier) => {
+          acc[tier.id] = { customReward: tier.customReward };
+          return acc;
+        }, {})
+      };
+
+      const newOverrides = { ...prev.userOverrides, [editingCategory.id]: categoryOverride };
+      const newData = { ...prev, userOverrides: newOverrides };
+      
+      if (updateCloudData) {
+         const cleanData = { ...newData };
+         delete cleanData.categories;
+         updateCloudData('rewards', cleanData);
+      }
       return newData;
     });
     setEditingCategory(null);
@@ -236,7 +292,7 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
       <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-10">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           
-          {safeData.categories.map((cat) => {
+          {activeCategories.map((cat) => {
             const currentProgress = safeData.progress[cat.id] || 0;
             const availableCheats = safeData.cheats[cat.id] || 0;
             
@@ -327,7 +383,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
                       className="text-gray-500 hover:text-white bg-black p-2 rounded-lg border border-gray-800 transition-colors shadow-sm hover:border-gray-600"
                       title="Customize this Reward"
                     >
-                      {/* SVG Gear Icon */}
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
