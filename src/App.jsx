@@ -93,12 +93,34 @@ function App() {
   const [isStudying, setIsStudying] = useState(false);
   const [spotifyEmbed, setSpotifyEmbed] = useState('https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?theme=0');
 
-  // --- HABIT STATE (Hydrated by Cloud) ---
-  const [habits, setHabits] = useState([
-    { id: 1, text: "Wake Up at 05:30" }, { id: 2, text: "Jogging 15 mins" }, { id: 3, text: "Gym 30 - 60 mins" },
-    { id: 4, text: "4-5 hour study" }, { id: 5, text: "Revision" }, { id: 6, text: "Coding 2 hr" }, { id: 7, text: "Leisure time" }
-  ]);
-  const [habitLogs, setHabitLogs] = useState({});
+  // --- HABIT STATE (Hydrated by LocalStorage instantly to fix Dashboard Graph) ---
+  const [habits, setHabits] = useState(() => {
+    try {
+      const saved = localStorage.getItem('habitTracker_habitsData');
+      if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    return [
+      { id: 1, text: "Wake Up at 05:30" }, { id: 2, text: "Jogging 15 mins" }, { id: 3, text: "Gym 30 - 60 mins" },
+      { id: 4, text: "4-5 hour study" }, { id: 5, text: "Revision" }, { id: 6, text: "Coding 2 hr" }, { id: 7, text: "Leisure time" }
+    ];
+  });
+  
+  const [habitLogs, setHabitLogs] = useState(() => {
+    try {
+      const saved = localStorage.getItem('habitTracker_logsData');
+      if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    return {};
+  });
+
+  // Automatically save to LocalStorage whenever state changes
+  useEffect(() => {
+    localStorage.setItem('habitTracker_habitsData', JSON.stringify(habits));
+  }, [habits]);
+
+  useEffect(() => {
+    localStorage.setItem('habitTracker_logsData', JSON.stringify(habitLogs));
+  }, [habitLogs]);
 
   // --------------------------------------------------------
   // 1. AUTHENTICATION LISTENER

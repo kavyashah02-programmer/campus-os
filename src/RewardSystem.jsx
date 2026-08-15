@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 
-// 1. ADDED "habits" PROP to pull in your habit tracker data
 const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => {
   
   // --- Re-structured Default Categories to support custom rewards ---
@@ -309,10 +308,10 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
             return (
               <div key={cat.id} className="bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex flex-col h-full group relative">
                 
-                {/* Settings Gear */}
+                {/* Settings Gear - Now Permanently Visible */}
                 <button 
                   onClick={() => setEditingCategory(cat)} 
-                  className="absolute top-4 right-4 text-gray-600 hover:text-white bg-black p-2 rounded-lg border border-gray-800 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute top-4 right-4 text-gray-600 hover:text-white bg-black p-2 rounded-lg border border-gray-800 transition-colors"
                   title="Customize this Reward"
                 >
                   ⚙️
