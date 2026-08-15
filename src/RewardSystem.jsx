@@ -5,7 +5,7 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
   // --- Re-structured Default Categories to support custom rewards ---
   const defaultCategories = [
     {
-      id: 'wakeup', name: 'Early Bird', icon: '🌅', desc: 'Wake up at 5:30 AM',
+      id: 'wakeup', name: 'Rise Master', icon: '🌅', desc: 'Wake up at 5:30 AM',
       tiers: [
         { id: 1, name: 'Tier I', target: 7, baseReward: '1 Cheat Day', customReward: '', cheats: 1, level: 'Bronze' },
         { id: 2, name: 'Tier II', target: 21, baseReward: '1 Cheat Day', customReward: 'Fancy Coffee', cheats: 1, level: 'Silver' },
@@ -13,7 +13,7 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
       ]
     },
     {
-      id: 'gym', name: 'Gym Rat', icon: '🏋️', desc: 'Hit the gym consistently',
+      id: 'gym', name: 'Training Titan', icon: '🏋️', desc: 'Hit the gym consistently',
       tiers: [
         { id: 4, name: 'Tier I', target: 10, baseReward: '1 Cheat Day', customReward: '', cheats: 1, level: 'Bronze' },
         { id: 5, name: 'Tier II', target: 20, baseReward: '1 Cheat Day', customReward: 'Thickshake', cheats: 1, level: 'Silver' },
@@ -21,7 +21,7 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
       ]
     },
     {
-      id: 'code', name: 'Code Monkey', icon: '💻', desc: 'Code daily outside coursework for atleast an hour',
+      id: 'code', name: 'Coding Legend', icon: '💻', desc: 'Code daily outside coursework for atleast an hour',
       tiers: [
         { id: 7, name: 'Tier I', target: 10, baseReward: '1 Cheat Day', customReward: '', cheats: 1, level: 'Bronze' },
         { id: 8, name: 'Tier II', target: 20, baseReward: '1 Cheat Day', customReward: '1 Hr binge watch anime', cheats: 1, level: 'Silver' },
