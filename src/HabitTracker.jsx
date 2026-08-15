@@ -2,34 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactApexChart from 'react-apexcharts';
 
 const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudData }) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  // 1. Fetch from LocalStorage and update App.jsx props
-  useEffect(() => {
-    try {
-      const savedHabits = localStorage.getItem('habitTracker_habitsData');
-      const savedLogs = localStorage.getItem('habitTracker_logsData');
-
-      if (savedHabits) {
-        setHabits(JSON.parse(savedHabits));
-      }
-      if (savedLogs) {
-        setHabitLogs(JSON.parse(savedLogs));
-      }
-    } catch (e) {
-      console.error("Failed to load habit data from local storage", e);
-    }
-    setIsLoaded(true);
-  }, [setHabits, setHabitLogs]);
-
-  // 2. Save any changes back to LocalStorage securely
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem('habitTracker_habitsData', JSON.stringify(habits));
-      localStorage.setItem('habitTracker_logsData', JSON.stringify(habitLogs));
-    }
-  }, [habits, habitLogs, isLoaded]);
-
+  
   // CRITICAL FIX: Guarantee an array and object to prevent White Screen crashes
   const safeHabits = Array.isArray(habits) ? habits : [];
   const safeHabitLogs = habitLogs || {};
@@ -44,12 +17,28 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
   const [newHabitText, setNewHabitText] = useState('');
   const [selectedAnalysisHabit, setSelectedAnalysisHabit] = useState('');
 
+  // 1. ONLY load on mount. We removed the auto-save useEffect to prevent race conditions.
+  useEffect(() => {
+    try {
+      const savedHabits = localStorage.getItem('habitTracker_habitsData');
+      const savedLogs = localStorage.getItem('habitTracker_logsData');
+
+      if (savedHabits) setHabits(JSON.parse(savedHabits));
+      if (savedLogs) setHabitLogs(JSON.parse(savedLogs));
+    } catch (e) {
+      console.error("Failed to load habit data from local storage", e);
+    }
+  }, [setHabits, setHabitLogs]);
+
   useEffect(() => {
     if (safeHabits.length > 0 && !selectedAnalysisHabit) {
       setSelectedAnalysisHabit(safeHabits[0].id.toString());
     }
   }, [safeHabits, selectedAnalysisHabit]);
 
+  // --- 2. The "Invisible Save Button" Logic ---
+  // We now explicitly save to LocalStorage the exact moment you click something.
+  
   const toggleHabit = (id) => {
     const dayLogs = safeHabitLogs[logDate] || {};
     const newHabitLogs = { 
@@ -58,6 +47,7 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
     };
     
     setHabitLogs(newHabitLogs); 
+    localStorage.setItem('habitTracker_logsData', JSON.stringify(newHabitLogs)); // Explicit Save
     if (updateCloudData) updateCloudData('habitLogs', newHabitLogs); 
   };
 
@@ -67,6 +57,7 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
     
     const newHabits = [...safeHabits, { id: Date.now(), text: newHabitText }];
     setHabits(newHabits);
+    localStorage.setItem('habitTracker_habitsData', JSON.stringify(newHabits)); // Explicit Save
     if (updateCloudData) updateCloudData('habits', newHabits);
     
     setNewHabitText('');
@@ -76,6 +67,7 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
     if(window.confirm("Delete this habit entirely?")) {
       const newHabits = safeHabits.filter(h => h.id !== id);
       setHabits(newHabits);
+      localStorage.setItem('habitTracker_habitsData', JSON.stringify(newHabits)); // Explicit Save
       if (updateCloudData) updateCloudData('habits', newHabits);
     }
   };
