@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useLocalStorageSync } from './useLocalStorageSync'; // Ensure this path matches
 
-// 1. Accept the new cloud props from App.jsx
 const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
   
   // Default items for new users
@@ -15,18 +15,30 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
     { id: 8, name: 'Bed Sheets', price: 40, count: 0 },
   ];
 
-  // 2. Initialize state with cloud data (fallback to defaults if empty)
-  const [items, setItems] = useState(cloudLaundry.items || defaultItems);
-  const [totalDue, setTotalDue] = useState(cloudLaundry.totalDue || 0);
+  // 1. Array sync for laundry items using custom hook
+  const [items, setItems] = useLocalStorageSync('laundryItemsData', cloudLaundry.items || []);
+
+  // 2. Manual local storage for totalDue (since it's a number, not an array)
+  const [totalDue, setTotalDue] = useState(() => {
+    const saved = localStorage.getItem('laundryTotalDueData');
+    return saved !== null ? Number(saved) : (cloudLaundry.totalDue || 0);
+  });
+
+  // Keep totalDue synced to local storage automatically
+  useEffect(() => {
+    localStorage.setItem('laundryTotalDueData', totalDue);
+  }, [totalDue]);
+
+  // Sync totalDue from cloud if it updates externally
+  useEffect(() => {
+    if (cloudLaundry.totalDue !== undefined) setTotalDue(cloudLaundry.totalDue);
+  }, [cloudLaundry.totalDue]);
+
+  // 3. CRITICAL FIX: Guarantee an array to prevent crashes
+  const safeItems = Array.isArray(items) && items.length > 0 ? items : defaultItems;
   
   const [newName, setNewName] = useState('');
   const [newPrice, setNewPrice] = useState('');
-
-  // 3. Keep local state synced if cloud data changes from another device
-  useEffect(() => {
-    if (cloudLaundry.items) setItems(cloudLaundry.items);
-    if (cloudLaundry.totalDue !== undefined) setTotalDue(cloudLaundry.totalDue);
-  }, [cloudLaundry]);
 
   // --- UNIVERSAL CLOUD SAVE HELPER ---
   const saveToCloud = (newItems, newTotalDue) => {
@@ -38,7 +50,7 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
   };
 
   const updateCount = (id, delta) => {
-    const newItems = items.map(item => {
+    const newItems = safeItems.map(item => {
       if (item.id === id) {
         const newCount = item.count + delta;
         return { ...item, count: newCount >= 0 ? newCount : 0 };
@@ -49,14 +61,14 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
   };
 
   const updatePrice = (id, newBasePrice) => {
-    const newItems = items.map(item => 
+    const newItems = safeItems.map(item => 
       item.id === id ? { ...item, price: newBasePrice >= 0 ? newBasePrice : 0 } : item
     );
     saveToCloud(newItems, totalDue);
   };
 
   const deleteItem = (id) => {
-    const newItems = items.filter(item => item.id !== id);
+    const newItems = safeItems.filter(item => item.id !== id);
     saveToCloud(newItems, totalDue);
   };
 
@@ -64,7 +76,7 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
     e.preventDefault();
     if (!newName || !newPrice) return;
     const newItem = { id: Date.now(), name: newName, price: Number(newPrice), count: 0 };
-    const newItems = [...items, newItem];
+    const newItems = [...safeItems, newItem];
     
     saveToCloud(newItems, totalDue);
     
@@ -72,18 +84,18 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
     setNewPrice('');
   };
 
-  const currentBatchTotal = items.reduce((sum, item) => sum + (item.price * item.count), 0);
+  const currentBatchTotal = safeItems.reduce((sum, item) => sum + (item.price * item.count), 0);
 
   const sendToLaundry = () => {
     if (currentBatchTotal === 0) return;
     const newTotalDue = totalDue + currentBatchTotal;
-    const newItems = items.map(item => ({ ...item, count: 0 }));
+    const newItems = safeItems.map(item => ({ ...item, count: 0 }));
     
     saveToCloud(newItems, newTotalDue);
   };
 
   const payBill = () => {
-    saveToCloud(items, 0);
+    saveToCloud(safeItems, 0);
   };
 
   return (
@@ -106,7 +118,7 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
       </div>
 
       <div className="flex-1 overflow-y-auto pr-2 space-y-3 mb-4 custom-scrollbar">
-        {items.map((item) => (
+        {safeItems.map((item) => (
           <div key={item.id} className="flex items-center justify-between bg-[#1a1a1a] p-3 rounded-lg border border-gray-700 group">
             <div>
               <p className="text-white text-base font-semibold">{item.name}</p>

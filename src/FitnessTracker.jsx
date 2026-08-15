@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ReactApexChart from 'react-apexcharts';
 
-// 1. Accept the new cloud props from App.jsx
 const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
   const getLocalDateStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   
@@ -9,17 +8,45 @@ const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
   const [exercise, setExercise] = useState(0);
   const [sleep, setSleep] = useState(0);
   const [water, setWater] = useState(0);
-  const [coffee, setCoffee] = useState(0);  // Coffee state
-  const [shakes, setShakes] = useState(0);  // Shakes state
-  const [isSaved, setIsSaved] = useState(true); // Tracks unsaved changes
+  const [coffee, setCoffee] = useState(0); 
+  const [shakes, setShakes] = useState(0); 
+  const [isSaved, setIsSaved] = useState(true);
 
-  // 2. Initialize state with cloud data
-  const [allData, setAllData] = useState(cloudFitness);
+  // --- NEW OBJECT-BASED SYNC LOGIC ---
+  const [allData, setAllData] = useState({});
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // 3. Keep local state synced if cloud data changes
+  // 1. Load from LocalStorage securely AFTER mount
   useEffect(() => {
-    setAllData(cloudFitness);
-  }, [cloudFitness]);
+    try {
+      const savedData = localStorage.getItem('fitnessTrackerData');
+      if (savedData) {
+        setAllData(JSON.parse(savedData));
+      } else if (cloudFitness && Object.keys(cloudFitness).length > 0) {
+        setAllData(cloudFitness);
+      }
+    } catch (e) {
+      console.error("Failed to load fitness data from local storage", e);
+    }
+    setIsLoaded(true); 
+  }, []);
+
+  // 2. Save to LocalStorage whenever allData changes (after initial load)
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem('fitnessTrackerData', JSON.stringify(allData));
+    }
+  }, [allData, isLoaded]);
+
+  // 3. Intelligently merge incoming cloud data (Objects instead of Arrays)
+  useEffect(() => {
+    if (isLoaded && cloudFitness && Object.keys(cloudFitness).length > 0) {
+      setAllData(prevData => ({ ...prevData, ...cloudFitness }));
+    }
+  }, [cloudFitness, isLoaded]);
+
+  // CRITICAL FIX: Guarantee an object to prevent crashes if state is null
+  const safeAllData = allData || {};
 
   // Warn before closing browser tab if unsaved
   useEffect(() => {
@@ -31,27 +58,26 @@ const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
   }, [isSaved]);
 
   useEffect(() => {
-    const dayData = allData[fitnessDate] || { exercise: 0, sleep: 0, water: 0, coffee: 0, shakes: 0 };
+    const dayData = safeAllData[fitnessDate] || { exercise: 0, sleep: 0, water: 0, coffee: 0, shakes: 0 };
     setExercise(dayData.exercise || 0); 
     setSleep(dayData.sleep || 0); 
     setWater(dayData.water || 0); 
     setCoffee(dayData.coffee || 0); 
     setShakes(dayData.shakes || 0);
     setIsSaved(true);
-  }, [fitnessDate, allData]);
+  }, [fitnessDate, safeAllData]);
 
   const handleDateChange = (newDate) => {
     if (!isSaved && !window.confirm("You have unsaved fitness data for this date! Proceed without saving?")) return;
     setFitnessDate(newDate);
   };
 
-  // 4. Update the save function to push to the cloud universally
   const handleSave = () => {
-    const newData = { ...allData, [fitnessDate]: { exercise, sleep, water, coffee, shakes } };
+    const newData = { ...safeAllData, [fitnessDate]: { exercise, sleep, water, coffee, shakes } };
     setAllData(newData);
-    updateCloudData('fitness', newData);
+    if (updateCloudData) updateCloudData('fitness', newData);
     setIsSaved(true);
-    setTimeout(() => { setIsSaved(false); setIsSaved(true); }, 2000); // Visual ping
+    setTimeout(() => { setIsSaved(false); setIsSaved(true); }, 2000); 
   };
 
   const adjustCounter = (setter, current, amount) => { 
@@ -59,7 +85,7 @@ const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
     setIsSaved(false); 
   };
 
-  // --- Monthly Analytics Graph (Only maps Exercise, Sleep, and Water) ---
+  // --- Monthly Analytics Graph ---
   const [year, month] = fitnessDate.split('-');
   const daysInMonth = new Date(year, month, 0).getDate();
   const daysArray = Array.from({length: daysInMonth}, (_, i) => i + 1);
@@ -67,7 +93,7 @@ const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
   const seriesExercise = []; const seriesSleep = []; const seriesWater = [];
   daysArray.forEach(d => {
     const dStr = `${year}-${month}-${String(d).padStart(2, '0')}`;
-    const logs = allData[dStr] || { exercise: 0, sleep: 0, water: 0 };
+    const logs = safeAllData[dStr] || { exercise: 0, sleep: 0, water: 0 };
     seriesExercise.push(logs.exercise || 0);
     seriesSleep.push(logs.sleep || 0);
     seriesWater.push(logs.water || 0);
@@ -177,5 +203,4 @@ const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
     </div>
   );
 };
-
 export default FitnessTracker;

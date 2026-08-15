@@ -1,51 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useLocalStorageSync } from './useLocalStorageSync'; // Custom hook imported from src/
 
 const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
-  const [tasks, setTasks] = useState([]);
-  const [isLoaded, setIsLoaded] = useState(false);
+  // 1. Replaced the 40 lines of manual load/save/merge logic with your custom hook!
+  const [tasks, setTasks] = useLocalStorageSync('taskManagerTasks', cloudTasks);
 
-  // 1. Load from LocalStorage securely AFTER the component mounts (fixes SSR & hydration issues)
-  useEffect(() => {
-    try {
-      const savedTasks = localStorage.getItem('taskManagerTasks');
-      if (savedTasks) {
-        setTasks(JSON.parse(savedTasks));
-      } else if (cloudTasks && cloudTasks.length > 0) {
-        setTasks(cloudTasks);
-      }
-    } catch (e) {
-      console.error("Failed to load tasks from local storage", e);
-    }
-    setIsLoaded(true); // Mark as loaded so we don't accidentally overwrite storage
-  }, []);
+  // 2. CRITICAL FIX: Guarantee an array to prevent crashes during mapping/filtering
+  const safeTasks = Array.isArray(tasks) ? tasks : [];
 
-  // 2. Save to LocalStorage whenever tasks change (but ONLY after the initial load is done)
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem('taskManagerTasks', JSON.stringify(tasks));
-    }
-  }, [tasks, isLoaded]);
-  
-  // 3. Intelligently merge incoming cloud data instead of blindly overwriting local tasks
-  useEffect(() => {
-    if (isLoaded && cloudTasks && cloudTasks.length > 0) {
-      setTasks(prevTasks => {
-        const mergedTasks = [...prevTasks];
-        let hasNewTasks = false;
-        
-        cloudTasks.forEach(cloudTask => {
-          // Only add the cloud task if it doesn't already exist in our local state
-          if (!mergedTasks.some(t => t.id === cloudTask.id)) {
-            mergedTasks.push(cloudTask);
-            hasNewTasks = true;
-          }
-        });
-        
-        return hasNewTasks ? mergedTasks : prevTasks;
-      });
-    }
-  }, [cloudTasks, isLoaded]);
-  // ... rest of your state variables
   const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -82,7 +44,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     e.preventDefault();
     if (!title || !date) return;
 
-    let updatedTasks = [...tasks];
+    let updatedTasks = [...safeTasks];
 
     if (editingId) {
       const taskIndex = updatedTasks.findIndex(x => x.id === editingId);
@@ -115,7 +77,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   };
 
   const handleEdit = (id) => {
-    const t = tasks.find(x => x.id === id);
+    const t = safeTasks.find(x => x.id === id);
     if (!t) return;
     
     setEditingId(t.id);
@@ -136,7 +98,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   };
 
   const toggleTask = (id, targetDate) => {
-    const updatedTasks = tasks.map(t => {
+    const updatedTasks = safeTasks.map(t => {
       if (t.id === id) {
         const completed = t.completedDates || [];
         const newCompleted = completed.includes(targetDate)
@@ -152,16 +114,16 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   };
 
   const deleteTask = (id, targetDate) => {
-    const t = tasks.find(x => x.id === id);
+    const t = safeTasks.find(x => x.id === id);
     if (!t) return;
 
     if (window.confirm(`Delete this task for ${targetDate} only?`)) {
       let updatedTasks;
 
       if ((t.repeat === 'none' || !t.repeat) && t.date === targetDate) {
-        updatedTasks = tasks.filter(x => x.id !== id);
+        updatedTasks = safeTasks.filter(x => x.id !== id);
       } else {
-        updatedTasks = tasks.map(x => {
+        updatedTasks = safeTasks.map(x => {
           if (x.id === id) {
             return { ...x, excludedDates: [...(x.excludedDates || []), targetDate] };
           }
@@ -206,7 +168,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   };
 
   // --- SORTING LOGIC: Date -> Timeline (Time OR Deadline Time) -> Creation ---
-  const selectedDateTasks = tasks
+  const selectedDateTasks = safeTasks
     .filter(t => isTaskVisibleOnDate(t, selectedDate))
     .sort((a, b) => {
       // 1. Sort by Scheduled Date
@@ -238,7 +200,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     const nextDateStr = currDateObj.toISOString().split('T')[0];
 
     if (window.confirm(`Carry forward ${pendingTasks.length} pending task(s) to ${nextDateStr}?`)) {
-      let updatedTasks = [...tasks];
+      let updatedTasks = [...safeTasks];
 
       pendingTasks.forEach((pt, index) => {
         if (pt.repeat === 'none' || !pt.repeat) {
@@ -529,7 +491,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const dayNum = i + 1;
                 const dayStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                const dayTasks = tasks.filter(t => isTaskVisibleOnDate(t, dayStr));
+                const dayTasks = safeTasks.filter(t => isTaskVisibleOnDate(t, dayStr));
                 const isToday = dayStr === realTodayStr;
                 
                 return (

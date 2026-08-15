@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useLocalStorageSync } from './useLocalStorageSync'; // Ensure this path matches
 
-// 1. Accept the new cloud props from App.jsx
 const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
   
   // Default accounts for new users
@@ -9,21 +9,21 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
     { id: 'acc_2', name: 'Bank Account', initialBalance: 0, isLocked: false }
   ];
 
-  // 2. Initialize state with cloud data (fallback to defaults)
-  const [accounts, setAccounts] = useState(cloudFinance.accounts || defaultAccounts);
-  const [transactions, setTransactions] = useState(cloudFinance.transactions || []);
+  // 1. Replaced the old state and useEffects with your custom hooks!
+  const [accounts, setAccounts] = useLocalStorageSync('financeAccountsData', cloudFinance.accounts || []);
+  const [transactions, setTransactions] = useLocalStorageSync('financeTransactionsData', cloudFinance.transactions || []);
 
-  // 3. Keep local state synced if cloud data changes
-  useEffect(() => {
-    if (cloudFinance.accounts) setAccounts(cloudFinance.accounts);
-    if (cloudFinance.transactions) setTransactions(cloudFinance.transactions);
-  }, [cloudFinance]);
+  // 2. CRITICAL FIX: Guarantee an array to prevent crashes
+  const safeAccounts = Array.isArray(accounts) && accounts.length > 0 ? accounts : defaultAccounts;
+  const safeTransactions = Array.isArray(transactions) ? transactions : [];
 
   // --- UNIVERSAL CLOUD SAVE HELPER ---
   const saveToCloud = (updatedAccounts, updatedTransactions) => {
     setAccounts(updatedAccounts);
     setTransactions(updatedTransactions);
-    updateCloudData('finance', { accounts: updatedAccounts, transactions: updatedTransactions });
+    if (updateCloudData) {
+      updateCloudData('finance', { accounts: updatedAccounts, transactions: updatedTransactions });
+    }
   };
 
   const [editingTxId, setEditingTxId] = useState(null);
@@ -39,7 +39,7 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
   const [pdfStartDate, setPdfStartDate] = useState('');
   const [pdfEndDate, setPdfEndDate] = useState('');
 
-  const lockedAccounts = accounts.filter(a => a.isLocked);
+  const lockedAccounts = safeAccounts.filter(a => a.isLocked);
   
   useEffect(() => {
     if (!editingTxId) {
@@ -50,11 +50,11 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
         setAccountId(''); setToAccountId('');
       }
     }
-  }, [accounts, type, editingTxId, accountId, toAccountId, lockedAccounts]);
+  }, [safeAccounts, type, editingTxId, accountId, toAccountId, lockedAccounts]);
 
   // --- CORE LOGIC: Balance Calculations ---
   const getNetFlow = (accId, excludeTxId = null) => {
-    const relevantTransactions = excludeTxId ? transactions.filter(t => t.id !== excludeTxId) : transactions;
+    const relevantTransactions = excludeTxId ? safeTransactions.filter(t => t.id !== excludeTxId) : safeTransactions;
     return relevantTransactions.reduce((total, t) => {
       if (t.type === 'income' && t.accountId === accId) return total + t.amount;
       if (t.type === 'expense' && t.accountId === accId) return total - t.amount;
@@ -67,20 +67,20 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
   };
 
   const getCurrentBalance = (accId, excludeTxId = null) => {
-    const acc = accounts.find(a => a.id === accId);
+    const acc = safeAccounts.find(a => a.id === accId);
     if (!acc) return 0;
     return acc.initialBalance + getNetFlow(accId, excludeTxId);
   };
 
   // --- ACCOUNT MANAGEMENT ---
   const handleAccountChange = (id, field, value) => {
-    const updatedAccounts = accounts.map(acc => acc.id === id ? { ...acc, [field]: field === 'initialBalance' ? Number(value) : value } : acc);
-    saveToCloud(updatedAccounts, transactions);
+    const updatedAccounts = safeAccounts.map(acc => acc.id === id ? { ...acc, [field]: field === 'initialBalance' ? Number(value) : value } : acc);
+    saveToCloud(updatedAccounts, safeTransactions);
   };
 
   const toggleLock = (id) => {
     let rejected = false;
-    const updatedAccounts = accounts.map(acc => {
+    const updatedAccounts = safeAccounts.map(acc => {
       if (acc.id === id) {
         if (!acc.isLocked) {
           const netFlow = getNetFlow(acc.id);
@@ -97,20 +97,20 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
       return acc;
     });
 
-    if (!rejected) saveToCloud(updatedAccounts, transactions);
+    if (!rejected) saveToCloud(updatedAccounts, safeTransactions);
   };
 
   const addAccount = () => {
-    const updatedAccounts = [...accounts, { id: Date.now().toString(), name: 'New Account', initialBalance: 0, isLocked: false }];
-    saveToCloud(updatedAccounts, transactions);
+    const updatedAccounts = [...safeAccounts, { id: Date.now().toString(), name: 'New Account', initialBalance: 0, isLocked: false }];
+    saveToCloud(updatedAccounts, safeTransactions);
   };
   
   const deleteAccount = (id) => {
-    const hasHistory = transactions.some(t => t.accountId === id || t.toAccountId === id);
+    const hasHistory = safeTransactions.some(t => t.accountId === id || t.toAccountId === id);
     if (hasHistory) return alert("Cannot delete an account that has transaction history. Please delete its transactions first.");
     if (window.confirm("Delete this account?")) {
-      const updatedAccounts = accounts.filter(a => a.id !== id);
-      saveToCloud(updatedAccounts, transactions);
+      const updatedAccounts = safeAccounts.filter(a => a.id !== id);
+      saveToCloud(updatedAccounts, safeTransactions);
     }
   };
 
@@ -138,19 +138,19 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
 
     let updatedTransactions;
     if (editingTxId) {
-      updatedTransactions = transactions.map(t => t.id === editingTxId ? newTx : t);
+      updatedTransactions = safeTransactions.map(t => t.id === editingTxId ? newTx : t);
       setEditingTxId(null);
     } else {
-      updatedTransactions = [newTx, ...transactions];
+      updatedTransactions = [newTx, ...safeTransactions];
     }
     
-    saveToCloud(accounts, updatedTransactions);
+    saveToCloud(safeAccounts, updatedTransactions);
     
     setAmount(''); setDesc(''); setCategory('');
   };
 
   const editTransaction = (id) => {
-    const t = transactions.find(x => x.id === id);
+    const t = safeTransactions.find(x => x.id === id);
     if (!t) return;
     setEditingTxId(t.id); setType(t.type); setAccountId(t.accountId); setToAccountId(t.toAccountId || '');
     setAmount(t.amount.toString()); setDesc(t.desc); setCategory(t.category || ''); setDate(t.date);
@@ -163,17 +163,17 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
 
   const deleteTransaction = (id) => {
     if (window.confirm("Delete this transaction?")) {
-      const updatedTransactions = transactions.filter(t => t.id !== id);
-      saveToCloud(accounts, updatedTransactions);
+      const updatedTransactions = safeTransactions.filter(t => t.id !== id);
+      saveToCloud(safeAccounts, updatedTransactions);
     }
   };
 
   const exportPDF = () => window.print();
 
-  const totalNetWorth = accounts.reduce((sum, acc) => sum + getCurrentBalance(acc.id), 0);
+  const totalNetWorth = safeAccounts.reduce((sum, acc) => sum + getCurrentBalance(acc.id), 0);
 
   // Filter transactions specifically for the PDF View
-  const pdfFilteredTransactions = transactions.filter(t => {
+  const pdfFilteredTransactions = safeTransactions.filter(t => {
     if (pdfStartDate && t.date < pdfStartDate) return false;
     if (pdfEndDate && t.date > pdfEndDate) return false;
     return true;
@@ -230,7 +230,7 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {accounts.map(acc => (
+          {safeAccounts.map(acc => (
             <div key={acc.id} className={`p-4 rounded-xl border transition-all ${acc.isLocked ? 'bg-black border-emerald-900/50 shadow-[0_0_10px_rgba(16,185,129,0.05)]' : 'bg-[#1a1a1a] border-gray-700 border-dashed'}`}>
               {!acc.isLocked ? (
                 <div className="space-y-3">
@@ -346,12 +346,12 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
           <h2 className="text-lg font-bold text-white mb-4 border-b border-gray-800 pb-3">Transaction Ledger</h2>
           
           <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
-            {transactions.length === 0 ? (
+            {safeTransactions.length === 0 ? (
               <p className="text-sm text-gray-500 text-center py-8">No transactions logged yet.</p>
             ) : (
-              transactions.map(t => {
-                const accName = accounts.find(a => a.id === t.accountId)?.name || 'Deleted Account';
-                const toAccName = t.type === 'transfer' ? (accounts.find(a => a.id === t.toAccountId)?.name || 'Deleted Account') : '';
+              safeTransactions.map(t => {
+                const accName = safeAccounts.find(a => a.id === t.accountId)?.name || 'Deleted Account';
+                const toAccName = t.type === 'transfer' ? (safeAccounts.find(a => a.id === t.toAccountId)?.name || 'Deleted Account') : '';
                 
                 return (
                   <div key={t.id} className="flex justify-between items-center p-4 bg-black border border-gray-800 rounded-xl hover:border-gray-600 transition-colors">
@@ -412,7 +412,7 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
             </tr>
           </thead>
           <tbody>
-            {accounts.map(acc => (
+            {safeAccounts.map(acc => (
               <tr key={acc.id} className="border-b border-gray-200">
                 <td className="py-3 px-2 font-bold text-gray-800">{acc.name}</td>
                 <td className="py-3 px-2 font-black text-right text-lg">₹{getCurrentBalance(acc.id)}</td>
@@ -437,8 +437,8 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
             </thead>
             <tbody>
               {pdfFilteredTransactions.map(t => {
-                const accName = accounts.find(a => a.id === t.accountId)?.name || 'Deleted Account';
-                const toAccName = t.type === 'transfer' ? (accounts.find(a => a.id === t.toAccountId)?.name || 'Deleted Account') : '';
+                const accName = safeAccounts.find(a => a.id === t.accountId)?.name || 'Deleted Account';
+                const toAccName = t.type === 'transfer' ? (safeAccounts.find(a => a.id === t.toAccountId)?.name || 'Deleted Account') : '';
                 return (
                   <tr key={t.id} className="border-b border-gray-200 break-inside-avoid">
                     <td className="py-3 px-2 text-gray-600 whitespace-nowrap">{t.date}</td>

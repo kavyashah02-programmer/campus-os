@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocalStorageSync } from './useLocalStorageSync'; // Ensure this path matches
 
 // --- IndexedDB Setup for Large File Storage (Stored Locally on Device) ---
 const initDB = () => {
@@ -47,14 +48,15 @@ const deleteFileDB = async (id) => {
 
 // --- Library Component ---
 const Library = ({ cloudLibrary = {}, updateCloudData }) => {
+  // CRITICAL FIX: Guarantee object to prevent null crashes
+  const safeCloudLibrary = cloudLibrary || {};
   const defaultCategories = ['Notes', 'PPTs', 'Mind Maps', 'Shortcuts', 'Short Notes'];
   
-  // Folders sync to the Cloud
-  const [folders, setFolders] = useState(cloudLibrary.folders || []);
+  // 1. Folders now use persistent local storage so the structure survives refreshes
+  const [folders, setFolders] = useLocalStorageSync('libraryFoldersData', safeCloudLibrary.folders || []);
   
-  useEffect(() => {
-    if (cloudLibrary.folders) setFolders(cloudLibrary.folders);
-  }, [cloudLibrary.folders]);
+  // CRITICAL FIX: Guarantee an array to prevent .map() and .filter() crashes
+  const safeFolders = Array.isArray(folders) ? folders : [];
 
   const saveFoldersToCloud = (newFolders) => {
     setFolders(newFolders);
@@ -65,6 +67,8 @@ const Library = ({ cloudLibrary = {}, updateCloudData }) => {
   
   // Files start empty and load asynchronously from local IndexedDB
   const [files, setFiles] = useState([]);
+  const safeFiles = Array.isArray(files) ? files : []; // Failsafe for files
+
   const [currentPath, setCurrentPath] = useState([{ id: 'root', name: 'My Library', level: 0 }]);
   const [newItemName, setNewItemName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -74,7 +78,7 @@ const Library = ({ cloudLibrary = {}, updateCloudData }) => {
     const loadFiles = async () => {
       try {
         const storedFiles = await getFilesDB();
-        setFiles(storedFiles);
+        setFiles(storedFiles || []);
       } catch (err) {
         console.error("Failed to load files from IndexedDB", err);
       }
@@ -89,7 +93,7 @@ const Library = ({ cloudLibrary = {}, updateCloudData }) => {
     if (!newItemName.trim()) return;
     
     const newFolder = { id: Date.now().toString(), parentId: currentFolder.id, name: newItemName.trim(), level: currentFolder.level + 1 };
-    let newFolders = [...folders, newFolder];
+    let newFolders = [...safeFolders, newFolder];
 
     if (newFolder.level === 1) {
       const categoryFolders = defaultCategories.map((cat, idx) => ({
@@ -133,7 +137,10 @@ const Library = ({ cloudLibrary = {}, updateCloudData }) => {
       newFiles.push(fileRecord);
     }
 
-    setFiles(prev => [...prev, ...newFiles]);
+    setFiles(prev => {
+      const prevSafe = Array.isArray(prev) ? prev : [];
+      return [...prevSafe, ...newFiles];
+    });
     setIsUploading(false);
   };
 
@@ -144,26 +151,26 @@ const Library = ({ cloudLibrary = {}, updateCloudData }) => {
       let foundNew = true;
       while (foundNew) {
         foundNew = false;
-        folders.forEach(f => {
+        safeFolders.forEach(f => {
           if (idsToDelete.includes(f.parentId) && !idsToDelete.includes(f.id)) { idsToDelete.push(f.id); foundNew = true; }
         });
       }
       
-      const updatedFolders = folders.filter(f => !idsToDelete.includes(f.id));
+      const updatedFolders = safeFolders.filter(f => !idsToDelete.includes(f.id));
       saveFoldersToCloud(updatedFolders);
       
-      const filesToDelete = files.filter(f => idsToDelete.includes(f.folderId));
+      const filesToDelete = safeFiles.filter(f => idsToDelete.includes(f.folderId));
       for (const f of filesToDelete) {
         await deleteFileDB(f.id);
       }
-      setFiles(files.filter(f => !idsToDelete.includes(f.folderId)));
+      setFiles(safeFiles.filter(f => !idsToDelete.includes(f.folderId)));
     }
   };
 
   const deleteFile = async (id) => { 
     if (window.confirm("Delete this file?")) {
       await deleteFileDB(id);
-      setFiles(files.filter(f => f.id !== id));
+      setFiles(safeFiles.filter(f => f.id !== id));
     }
   };
 
@@ -188,8 +195,8 @@ const Library = ({ cloudLibrary = {}, updateCloudData }) => {
   const navigateTo = (folder) => setCurrentPath([...currentPath, folder]);
   const navigateUp = (index) => setCurrentPath(currentPath.slice(0, index + 1));
 
-  const currentSubFolders = folders.filter(f => f.parentId === currentFolder.id);
-  const currentFiles = files.filter(f => f.folderId === currentFolder.id);
+  const currentSubFolders = safeFolders.filter(f => f.parentId === currentFolder.id);
+  const currentFiles = safeFiles.filter(f => f.folderId === currentFolder.id);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 h-full flex flex-col">

@@ -98,14 +98,22 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
     }
   }, [cloudRewards]);
 
+  // CRITICAL FIX: Guarantee sub-objects exist so rendering never triggers a White Screen of Death
+  const safeData = {
+    progress: data?.progress || {},
+    cheats: data?.cheats || {},
+    claimed: Array.isArray(data?.claimed) ? data.claimed : []
+  };
+
   // --- Core Engine Functions ---
 
   // 1. Log a productive day
   const handleLog = (groupId) => {
     setData(prev => {
+      const prevProgress = prev?.progress || {};
       const newData = {
         ...prev,
-        progress: { ...prev.progress, [groupId]: (prev.progress[groupId] || 0) + 1 }
+        progress: { ...prevProgress, [groupId]: (prevProgress[groupId] || 0) + 1 }
       };
       // Push to Cloud
       if (updateCloudData) updateCloudData('rewards', newData);
@@ -116,9 +124,9 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
   // 2. Claim a specific tier
   const handleClaim = (groupId, tier, isFinalTier) => {
     setData(prev => {
-      let newClaimed = [...prev.claimed, tier.id];
-      let newProgress = { ...prev.progress };
-      let newCheats = { ...prev.cheats };
+      let newClaimed = [...(Array.isArray(prev?.claimed) ? prev.claimed : []), tier.id];
+      let newProgress = { ...(prev?.progress || {}) };
+      let newCheats = { ...(prev?.cheats || {}) };
 
       // Award specific cheat days
       newCheats[groupId] = (newCheats[groupId] || 0) + tier.cheats;
@@ -142,15 +150,17 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
 
   // 3. Missed a day / Use Cheat Day
   const handleMissedDay = (groupId) => {
-    const availableCheats = data.cheats[groupId] || 0;
+    const availableCheats = safeData.cheats[groupId] || 0;
     
     if (availableCheats > 0) {
       if (window.confirm(`You have ${availableCheats} Cheat Day(s) available for this task. \n\nDo you want to use 1 Cheat Day to instantly fill the gap (+1 progress) and keep your streak counting?`)) {
         setData(prev => {
+          const prevCheats = prev?.cheats || {};
+          const prevProgress = prev?.progress || {};
           const newData = {
             ...prev,
-            cheats: { ...prev.cheats, [groupId]: prev.cheats[groupId] - 1 },
-            progress: { ...prev.progress, [groupId]: prev.progress[groupId] + 1 }
+            cheats: { ...prevCheats, [groupId]: Math.max(0, (prevCheats[groupId] || 1) - 1) },
+            progress: { ...prevProgress, [groupId]: (prevProgress[groupId] || 0) + 1 }
           };
           // Push to Cloud
           if (updateCloudData) updateCloudData('rewards', newData);
@@ -160,11 +170,14 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
     } else {
       if (window.confirm("You have 0 Cheat Days for this task. Your streak is broken.\n\nResetting all tiers for this category to 0.")) {
         setData(prev => {
+          const prevProgress = prev?.progress || {};
+          const prevClaimed = Array.isArray(prev?.claimed) ? prev.claimed : [];
           const groupTierIds = categories.find(c => c.id === groupId).tiers.map(t => t.id);
+          
           const newData = {
             ...prev,
-            progress: { ...prev.progress, [groupId]: 0 },
-            claimed: prev.claimed.filter(id => !groupTierIds.includes(id))
+            progress: { ...prevProgress, [groupId]: 0 },
+            claimed: prevClaimed.filter(id => !groupTierIds.includes(id))
           };
           // Push to Cloud
           if (updateCloudData) updateCloudData('rewards', newData);
@@ -194,11 +207,12 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           
           {categories.map((cat) => {
-            const currentProgress = data.progress[cat.id] || 0;
-            const availableCheats = data.cheats[cat.id] || 0;
+            // Using safeData to prevent rendering crashes
+            const currentProgress = safeData.progress[cat.id] || 0;
+            const availableCheats = safeData.cheats[cat.id] || 0;
             
             // Find the active target for the progress bar (first unclaimed tier)
-            const activeTier = cat.tiers.find(t => !data.claimed.includes(t.id)) || cat.tiers[cat.tiers.length - 1];
+            const activeTier = cat.tiers.find(t => !safeData.claimed.includes(t.id)) || cat.tiers[cat.tiers.length - 1];
             const pct = Math.min(100, (currentProgress / activeTier.target) * 100);
 
             return (
@@ -228,7 +242,7 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData }) => {
                 {/* Tiers List */}
                 <div className="flex-1 space-y-3 mb-6">
                   {cat.tiers.map((tier, index) => {
-                    const isClaimed = data.claimed.includes(tier.id);
+                    const isClaimed = safeData.claimed.includes(tier.id);
                     const isClaimable = !isClaimed && currentProgress >= tier.target;
                     const isFinalTier = index === cat.tiers.length - 1;
 

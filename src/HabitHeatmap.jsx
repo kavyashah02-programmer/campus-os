@@ -7,6 +7,9 @@ const HabitHeatmap = ({ habitLogs = {} }) => {
     { name: "Wed", data: [] }, { name: "Thu", data: [] }, { name: "Fri", data: [] }, { name: "Sat", data: [] },
   ];
 
+  // CRITICAL FIX: Ensure safe object to prevent mapping errors
+  const safeLogs = habitLogs || {};
+
   // Ensure absolute local dates without timezone shifting
   const getLocalDateStr = (d) => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -33,7 +36,8 @@ const HabitHeatmap = ({ habitLogs = {} }) => {
     const dayOfWeek = d.getDay();
     const weekIndex = Math.floor(i / 7);
 
-    const logs = habitLogs[dateStr] || {};
+    // Pull from our safe fallback instead of direct props
+    const logs = safeLogs[dateStr] || {};
     const count = Object.values(logs).filter(Boolean).length;
 
     // If the date is later this week (hasn't happened yet), set to 0

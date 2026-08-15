@@ -3,6 +3,11 @@ import ReactApexChart from 'react-apexcharts';
 
 // 1. Accept updateCloudData alongside the state props from App.jsx
 const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudData }) => {
+  
+  // CRITICAL FIX: Guarantee an array and object to prevent White Screen crashes
+  const safeHabits = Array.isArray(habits) ? habits : [];
+  const safeHabitLogs = habitLogs || {};
+
   const getLocalDateStr = (d = new Date()) => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
@@ -15,16 +20,16 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
 
   // Set default selected habit for analysis chart on load
   useEffect(() => {
-    if (habits.length > 0 && !selectedAnalysisHabit) {
-      setSelectedAnalysisHabit(habits[0].id.toString());
+    if (safeHabits.length > 0 && !selectedAnalysisHabit) {
+      setSelectedAnalysisHabit(safeHabits[0].id.toString());
     }
-  }, [habits, selectedAnalysisHabit]);
+  }, [safeHabits, selectedAnalysisHabit]);
 
   // --- 2. Update toggle to push to the cloud ---
   const toggleHabit = (id) => {
-    const dayLogs = habitLogs[logDate] || {};
+    const dayLogs = safeHabitLogs[logDate] || {};
     const newHabitLogs = { 
-      ...habitLogs, 
+      ...safeHabitLogs, 
       [logDate]: { ...dayLogs, [id]: !dayLogs[id] } 
     };
     
@@ -37,7 +42,7 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
     e.preventDefault();
     if (!newHabitText.trim()) return;
     
-    const newHabits = [...habits, { id: Date.now(), text: newHabitText }];
+    const newHabits = [...safeHabits, { id: Date.now(), text: newHabitText }];
     setHabits(newHabits);
     if (updateCloudData) updateCloudData('habits', newHabits);
     
@@ -47,17 +52,17 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
   // --- 4. Update delete to push to the cloud ---
   const deleteHabit = (id) => {
     if(window.confirm("Delete this habit entirely?")) {
-      const newHabits = habits.filter(h => h.id !== id);
+      const newHabits = safeHabits.filter(h => h.id !== id);
       setHabits(newHabits);
       if (updateCloudData) updateCloudData('habits', newHabits);
     }
   };
 
   // --- CHART 1: Daily Donut Math ---
-  const dayLogs = habitLogs[logDate] || {};
-  const completedCount = habits.filter(h => dayLogs[h.id]).length;
-  const pendingCount = habits.length - completedCount;
-  const pct = habits.length > 0 ? Math.round((completedCount / habits.length) * 100) : 0;
+  const dayLogs = safeHabitLogs[logDate] || {};
+  const completedCount = safeHabits.filter(h => dayLogs[h.id]).length;
+  const pendingCount = safeHabits.length - completedCount;
+  const pct = safeHabits.length > 0 ? Math.round((completedCount / safeHabits.length) * 100) : 0;
   
   const donutOptions = { 
     chart: { type: 'donut', background: 'transparent' }, 
@@ -95,26 +100,43 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
     
     if (dStr > todayStr) { trendData.push(null); continue; } 
     
-    const dLogs = habitLogs[dStr] || {};
-    const cCount = habits.filter(h => dLogs[h.id]).length;
-    const dayPct = habits.length > 0 ? Math.round((cCount / habits.length) * 100) : 0;
+    const dLogs = safeHabitLogs[dStr] || {};
+    const cCount = safeHabits.filter(h => dLogs[h.id]).length;
+    const dayPct = safeHabits.length > 0 ? Math.round((cCount / safeHabits.length) * 100) : 0;
     
     trendData.push(dayPct);
     if (Object.keys(dLogs).length > 0) { totalPct += dayPct; daysTracked++; }
   }
   const avgMonthly = daysTracked > 0 ? Math.round(totalPct / daysTracked) : 0;
   
-  const monthlyOptions = { chart: { type: 'line', toolbar: { show: false }, background: 'transparent' }, colors: ['#3b82f6'], stroke: { curve: 'straight', width: 2 }, markers: { size: 4, colors: ['#3b82f6'], strokeColors: '#121212', strokeWidth: 2 }, xaxis: { categories: daysArray, labels: { style: { colors: '#6b7280' } }, axisBorder: { show: false }, axisTicks: { show: false } }, yaxis: { min: 0, max: 100, tickAmount: 5, labels: { formatter: (val) => val + "%", style: { colors: '#6b7280' } } }, grid: { borderColor: '#1f2937', strokeDashArray: 0 }, theme: { mode: 'dark' } };
+  const monthlyOptions = { 
+    chart: { type: 'line', toolbar: { show: false }, background: 'transparent' }, 
+    colors: ['#3b82f6'], 
+    stroke: { curve: 'straight', width: 2 }, 
+    markers: { size: 4, colors: ['#3b82f6'], strokeColors: '#121212', strokeWidth: 2 }, 
+    xaxis: { categories: daysArray, labels: { style: { colors: '#6b7280' } }, axisBorder: { show: false }, axisTicks: { show: false } }, 
+    yaxis: { min: 0, max: 100, tickAmount: 5, labels: { formatter: (val) => val + "%", style: { colors: '#6b7280' } } }, 
+    grid: { borderColor: '#1f2937', strokeDashArray: 0 }, 
+    theme: { mode: 'dark' } 
+  };
 
   // --- CHART 3: Stepline Analysis Math ---
   const analysisData = [];
   for(let i=1; i<=daysInMonth; i++) {
     const dStr = `${viewMonth}-${String(i).padStart(2, '0')}`;
     if (dStr > todayStr) { analysisData.push(null); continue; }
-    const dLogs = habitLogs[dStr] || {};
+    const dLogs = safeHabitLogs[dStr] || {};
     analysisData.push(dLogs[selectedAnalysisHabit] ? 1 : 0);
   }
-  const analysisOptions = { chart: { type: 'line', toolbar: { show: false }, background: 'transparent' }, colors: ['#10b981'], stroke: { curve: 'stepline', width: 2 }, xaxis: { categories: daysArray, labels: { style: { colors: '#6b7280' } }, axisBorder: { show: false }, axisTicks: { show: false } }, yaxis: { min: 0, max: 1, tickAmount: 1, labels: { formatter: (val) => val === 1 ? 'Yes' : 'No', style: { colors: '#6b7280' } } }, grid: { borderColor: '#1f2937', strokeDashArray: 0 }, theme: { mode: 'dark' } };
+  const analysisOptions = { 
+    chart: { type: 'line', toolbar: { show: false }, background: 'transparent' }, 
+    colors: ['#10b981'], 
+    stroke: { curve: 'stepline', width: 2 }, 
+    xaxis: { categories: daysArray, labels: { style: { colors: '#6b7280' } }, axisBorder: { show: false }, axisTicks: { show: false } }, 
+    yaxis: { min: 0, max: 1, tickAmount: 1, labels: { formatter: (val) => val === 1 ? 'Yes' : 'No', style: { colors: '#6b7280' } } }, 
+    grid: { borderColor: '#1f2937', strokeDashArray: 0 }, 
+    theme: { mode: 'dark' } 
+  };
 
   return (
     <div className="w-full flex flex-col h-full space-y-6">
@@ -144,7 +166,7 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
             />
 
             <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar mb-4">
-              {habits.map((habit) => {
+              {safeHabits.map((habit) => {
                 const isCompleted = dayLogs[habit.id] || false;
                 return (
                   <div key={habit.id} className="flex items-center justify-between bg-[#1a1a1a] p-4 rounded-lg border border-gray-800 group hover:border-gray-600 transition-colors">
@@ -187,7 +209,7 @@ const HabitTracker = ({ habits, setHabits, habitLogs, setHabitLogs, updateCloudD
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-white font-semibold text-lg flex items-center"><span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span> Habit Analysis</h3>
               <select value={selectedAnalysisHabit} onChange={(e) => setSelectedAnalysisHabit(e.target.value)} className="bg-black border border-gray-700 text-white px-3 py-1.5 rounded-lg text-sm focus:outline-none focus:border-emerald-500">
-                {habits.map(h => <option key={h.id} value={h.id.toString()}>{h.text}</option>)}
+                {safeHabits.map(h => <option key={h.id} value={h.id.toString()}>{h.text}</option>)}
               </select>
             </div>
             <div className="mt-2 -ml-2"><ReactApexChart options={analysisOptions} series={[{ name: 'Completed', data: [...analysisData] }]} type="line" height={200} /></div>

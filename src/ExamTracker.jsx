@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useLocalStorageSync } from './useLocalStorageSync'; // Updated path since it's in src/
 
-// 1. Accept the new cloud props from App.jsx
 const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
-  // 2. Initialize state with cloud data
-  const [exams, setExams] = useState(cloudExams);
+  // 1. Replaced the old state and useEffects with your custom hook!
+  const [exams, setExams] = useLocalStorageSync('examTrackerData', cloudExams);
 
   const [selectedExamId, setSelectedExamId] = useState(null);
   const [editingExamId, setEditingExamId] = useState(null);
@@ -13,20 +13,18 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
   const [examDate, setExamDate] = useState('');
   const [newTopic, setNewTopic] = useState('');
 
-  // 3. Keep local state synced if cloud data changes
-  useEffect(() => {
-    setExams(cloudExams);
-  }, [cloudExams]);
+  // 2. CRITICAL FIX: Guarantee an array to prevent crashes
+  const safeExams = Array.isArray(exams) ? exams : [];
 
   // Ensure an exam is selected if available
   useEffect(() => {
-    if (!selectedExamId && exams.length > 0) {
-      setSelectedExamId(exams[0].id);
-    } else if (selectedExamId && !exams.find(e => e.id === selectedExamId)) {
+    if (!selectedExamId && safeExams.length > 0) {
+      setSelectedExamId(safeExams[0].id);
+    } else if (selectedExamId && !safeExams.find(e => e.id === selectedExamId)) {
       // If the selected exam was deleted from another device
-      setSelectedExamId(exams.length > 0 ? exams[0].id : null);
+      setSelectedExamId(safeExams.length > 0 ? safeExams[0].id : null);
     }
-  }, [exams, selectedExamId]);
+  }, [safeExams, selectedExamId]);
 
   // --- SAVE / UPDATE EXAM ---
   const handleExamSubmit = (e) => {
@@ -35,17 +33,17 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
     
     let updatedExams;
     if (editingExamId) {
-      updatedExams = exams.map(ex => ex.id === editingExamId ? { ...ex, title: examTitle, subject: examSubject, date: examDate } : ex);
+      updatedExams = safeExams.map(ex => ex.id === editingExamId ? { ...ex, title: examTitle, subject: examSubject, date: examDate } : ex);
       setEditingExamId(null);
     } else {
       const newExam = { id: Date.now(), title: examTitle, subject: examSubject, date: examDate, topics: [] };
-      updatedExams = [...exams, newExam];
+      updatedExams = [...safeExams, newExam];
       setSelectedExamId(newExam.id);
     }
     
-    // 4. Update local state AND push to the cloud universally
+    // Update local state AND push to the cloud universally
     setExams(updatedExams);
-    updateCloudData('exams', updatedExams);
+    if (updateCloudData) updateCloudData('exams', updatedExams);
     
     setExamTitle(''); setExamSubject(''); setExamDate('');
   };
@@ -57,10 +55,10 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
 
   const deleteExam = (id) => {
     if(window.confirm("Delete this exam and all its topics?")) {
-      const remaining = exams.filter(e => e.id !== id);
+      const remaining = safeExams.filter(e => e.id !== id);
       
       setExams(remaining);
-      updateCloudData('exams', remaining);
+      if (updateCloudData) updateCloudData('exams', remaining);
       
       if (selectedExamId === id) setSelectedExamId(remaining.length > 0 ? remaining[0].id : null);
     }
@@ -71,25 +69,25 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
     e.preventDefault();
     if (!newTopic || !selectedExamId) return;
     
-    const updatedExams = exams.map(ex => ex.id === selectedExamId ? { ...ex, topics: [...ex.topics, { id: Date.now(), name: newTopic, studied: false, revised: false }] } : ex);
+    const updatedExams = safeExams.map(ex => ex.id === selectedExamId ? { ...ex, topics: [...ex.topics, { id: Date.now(), name: newTopic, studied: false, revised: false }] } : ex);
     
     setExams(updatedExams);
-    updateCloudData('exams', updatedExams);
+    if (updateCloudData) updateCloudData('exams', updatedExams);
     setNewTopic('');
   };
 
   const toggleTopicState = (examId, topicId, field) => {
-    const updatedExams = exams.map(ex => ex.id === examId ? { ...ex, topics: ex.topics.map(t => t.id === topicId ? { ...t, [field]: !t[field] } : t) } : ex);
+    const updatedExams = safeExams.map(ex => ex.id === examId ? { ...ex, topics: ex.topics.map(t => t.id === topicId ? { ...t, [field]: !t[field] } : t) } : ex);
     
     setExams(updatedExams);
-    updateCloudData('exams', updatedExams);
+    if (updateCloudData) updateCloudData('exams', updatedExams);
   };
 
   const deleteTopic = (examId, topicId) => {
-    const updatedExams = exams.map(ex => ex.id === examId ? { ...ex, topics: ex.topics.filter(t => t.id !== topicId) } : ex);
+    const updatedExams = safeExams.map(ex => ex.id === examId ? { ...ex, topics: ex.topics.filter(t => t.id !== topicId) } : ex);
     
     setExams(updatedExams);
-    updateCloudData('exams', updatedExams);
+    if (updateCloudData) updateCloudData('exams', updatedExams);
   };
 
   const calculateDaysLeft = (targetDate) => {
@@ -98,7 +96,7 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
     return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
   };
 
-  const currentExam = exams.find(e => e.id === selectedExamId);
+  const currentExam = safeExams.find(e => e.id === selectedExamId);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 h-full flex flex-col">
@@ -116,7 +114,7 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
           </div>
           
           <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-            {exams.map(exam => {
+            {safeExams.map(exam => {
               const daysLeft = calculateDaysLeft(exam.date);
               return (
                 <div key={exam.id} onClick={() => setSelectedExamId(exam.id)} className={`p-3 rounded-xl cursor-pointer transition-all border ${selectedExamId === exam.id ? 'bg-purple-900/20 border-purple-500 shadow-sm' : 'bg-black border-gray-800 hover:border-gray-600'}`}>
