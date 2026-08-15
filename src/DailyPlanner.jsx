@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useLocalStorageSync } from './hooks/useLocalStorageSync'; // Ensure this path matches where you saved the file!
 
 // 1. Accept the new cloud props from App.jsx
 const DailyPlanner = ({ cloudPlanner = [], updateCloudData }) => {
@@ -14,57 +15,14 @@ const DailyPlanner = ({ cloudPlanner = [], updateCloudData }) => {
   const [color, setColor] = useState('#6366f1'); 
   const [thingsToBring, setThingsToBring] = useState('');
   const [location, setLocation] = useState('');
- const [description, setDescription] = useState('');
+  const [description, setDescription] = useState('');
   
-  // --- NEW SYNC LOGIC STARTS HERE ---
-  const [blocks, setBlocks] = useState([]);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  // 1. Load from LocalStorage securely AFTER the component mounts
-  useEffect(() => {
-    try {
-      const savedBlocks = localStorage.getItem('dailyPlannerBlocks');
-      if (savedBlocks) {
-        setBlocks(JSON.parse(savedBlocks));
-      } else if (cloudPlanner && cloudPlanner.length > 0) {
-        setBlocks(cloudPlanner);
-      }
-    } catch (e) {
-      console.error("Failed to load planner blocks from local storage", e);
-    }
-    setIsLoaded(true); 
-  }, []);
-
-  // 2. Save to LocalStorage whenever blocks change (ONLY after initial load)
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem('dailyPlannerBlocks', JSON.stringify(blocks));
-    }
-  }, [blocks, isLoaded]);
-  
-  // 3. Intelligently merge incoming cloud data instead of blindly overwriting
-  useEffect(() => {
-    if (isLoaded && cloudPlanner && cloudPlanner.length > 0) {
-      setBlocks(prevBlocks => {
-        const mergedBlocks = [...prevBlocks];
-        let hasNewBlocks = false;
-        
-        cloudPlanner.forEach(cloudBlock => {
-          // Only add the cloud block if it doesn't already exist in our local state
-          if (!mergedBlocks.some(b => b.id === cloudBlock.id)) {
-            mergedBlocks.push(cloudBlock);
-            hasNewBlocks = true;
-          }
-        });
-        
-        return hasNewBlocks ? mergedBlocks : prevBlocks;
-      });
-    }
-  }, [cloudPlanner, isLoaded]);
-  // --- NEW SYNC LOGIC ENDS HERE ---
+  // --- MAGIC HAPPENS HERE: All 35 lines of sync logic replaced by this 1 line ---
+  const [blocks, setBlocks] = useLocalStorageSync('dailyPlannerBlocks', cloudPlanner);
+  // -------------------------------------------------------------------------------
 
   const [nowMins, setNowMins] = useState((new Date().getHours() * 60) + new Date().getMinutes());
-  // ... rest of your code remains exactly the same ...
+  
   const hours = Array.from({ length: 24 }, (_, i) => {
     const ampm = i < 12 ? 'AM' : 'PM';
     const hour = i % 12 === 0 ? 12 : i % 12;
