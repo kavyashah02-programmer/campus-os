@@ -24,7 +24,7 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
       id: 'code', name: 'Coding Legend', icon: '💻', desc: 'Code daily outside coursework for atleast an hour',
       tiers: [
         { id: 7, name: 'Tier I', target: 10, baseReward: '1 Cheat Day', customReward: '', cheats: 1, level: 'Bronze' },
-        { id: 8, name: 'Tier II', target: 20, baseReward: '1 Cheat Day', customReward: '1 Hr binge watch anime', cheats: 1, level: 'Silver' },
+        { id: 8, name: 'Tier II', target: 20, baseReward: '1 Cheat Day', customReward: 'Spend 1 Hr Binge-Watching Your Watchlist', cheats: 1, level: 'Silver' },
         { id: 9, name: 'Tier III', target: 40, baseReward: '2 Cheat Days', customReward: 'Premium dessert', cheats: 2, level: 'Gold' }
       ]
     },
