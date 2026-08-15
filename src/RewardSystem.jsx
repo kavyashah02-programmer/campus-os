@@ -308,18 +308,9 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
             return (
               <div key={cat.id} className="bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex flex-col h-full group relative">
                 
-                {/* Settings Gear - Now Permanently Visible */}
-                <button 
-                  onClick={() => setEditingCategory(cat)} 
-                  className="absolute top-4 right-4 text-gray-600 hover:text-white bg-black p-2 rounded-lg border border-gray-800 transition-colors"
-                  title="Customize this Reward"
-                >
-                  ⚙️
-                </button>
-
                 {/* Header */}
                 <div className="flex justify-between items-start mb-6">
-                  <div className="flex gap-4 pr-10">
+                  <div className="flex gap-4 pr-2">
                     <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl border border-gray-700 bg-black shadow-inner shrink-0">
                       {cat.icon}
                     </div>
@@ -329,13 +320,28 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
                     </div>
                   </div>
                   
-                  {/* Task-Specific Cheat Badge */}
-                  {cat.tiers.length > 1 && (
-                    <div className={`px-3 py-1.5 rounded-lg border flex flex-col items-center shrink-0 ${availableCheats > 0 ? 'bg-red-900/20 border-red-500/50 text-red-400' : 'bg-gray-900/50 border-gray-700 text-gray-500'}`}>
-                      <span className="text-[9px] font-bold uppercase tracking-wider">Cheat Days</span>
-                      <span className="text-lg font-black leading-none mt-0.5">{availableCheats}</span>
-                    </div>
-                  )}
+                  {/* Right Side Controls: Settings Gear & Cheat Badge grouped together */}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button 
+                      onClick={() => setEditingCategory(cat)} 
+                      className="text-gray-500 hover:text-white bg-black p-2 rounded-lg border border-gray-800 transition-colors shadow-sm hover:border-gray-600"
+                      title="Customize this Reward"
+                    >
+                      {/* SVG Gear Icon */}
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                      </svg>
+                    </button>
+
+                    {/* Task-Specific Cheat Badge */}
+                    {cat.tiers.length > 1 && (
+                      <div className={`px-3 py-1.5 rounded-lg border flex flex-col items-center shrink-0 shadow-sm ${availableCheats > 0 ? 'bg-red-900/20 border-red-500/50 text-red-400' : 'bg-gray-900/50 border-gray-700 text-gray-500'}`}>
+                        <span className="text-[9px] font-bold uppercase tracking-wider">Cheat Days</span>
+                        <span className="text-lg font-black leading-none mt-0.5">{availableCheats}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Tiers List */}
