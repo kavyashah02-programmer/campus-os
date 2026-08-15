@@ -474,18 +474,18 @@ function App() {
                </div>
 
                <div className="bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-green-400 font-bold text-sm uppercase tracking-wider flex items-center gap-2">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.52 17.34c-.24.36-.66.48-1.02.24-2.82-1.74-6.36-2.1-10.56-1.14-.42.12-.84-.12-.96-.54-.12-.42.12-.84.54-.96 4.56-1.02 8.52-.6 11.64 1.32.42.18.48.66.36 1.08zm1.44-3.18c-.3.42-.84.54-1.26.24-3.24-1.98-8.16-2.58-11.94-1.44-.48.18-1.02-.06-1.2-.54-.18-.48.06-1.02.54-1.2 4.32-1.32 9.72-.66 13.5 1.62.48.3.6 0.84.36 1.32zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.3c-.6.18-1.2-.12-1.38-.72-.18-.6.12-1.2.72-1.38 4.2-1.32 11.28-1.08 15.9 1.68.54.3.72.96.42 1.5-.24.54-.84.72-1.38.42z"/></svg> Study Vibes
-                      </h3>
-                      <input type="text" placeholder="Paste Playlist Link..." onChange={handleSpotifyLink} className="bg-black border border-gray-700 text-gray-300 text-xs rounded-lg px-3 py-1.5 w-36 focus:border-green-500 outline-none transition-colors" />
-                    </div>
-                    <iframe style={{borderRadius: '12px'}} src={spotifyEmbed} width="100%" height="152" frameBorder="0" allowFullScreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
-                  </div>
-                  <button onClick={() => window.open(getFullSpotifyLink(), '_blank')} className="mt-4 w-full bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold py-2 rounded-lg text-sm transition-colors flex items-center justify-center gap-2 shadow-[0_0_10px_rgba(29,185,84,0.2)]">
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg> Open Full Playlist in Spotify App
-                  </button>
+                 <div>
+                   <div className="flex justify-between items-center mb-4">
+                     <h3 className="text-green-400 font-bold text-sm uppercase tracking-wider flex items-center gap-2">
+                       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.52 17.34c-.24.36-.66.48-1.02.24-2.82-1.74-6.36-2.1-10.56-1.14-.42.12-.84-.12-.96-.54-.12-.42.12-.84.54-.96 4.56-1.02 8.52-.6 11.64 1.32.42.18.48.66.36 1.08zm1.44-3.18c-.3.42-.84.54-1.26.24-3.24-1.98-8.16-2.58-11.94-1.44-.48.18-1.02-.06-1.2-.54-.18-.48.06-1.02.54-1.2 4.32-1.32 9.72-.66 13.5 1.62.48.3.6 0.84.36 1.32zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.3c-.6.18-1.2-.12-1.38-.72-.18-.6.12-1.2.72-1.38 4.2-1.32 11.28-1.08 15.9 1.68.54.3.72.96.42 1.5-.24.54-.84.72-1.38.42z"/></svg> Study Vibes
+                     </h3>
+                     <input type="text" placeholder="Paste Playlist Link..." onChange={handleSpotifyLink} className="bg-black border border-gray-700 text-gray-300 text-xs rounded-lg px-3 py-1.5 w-36 focus:border-green-500 outline-none transition-colors" />
+                   </div>
+                   <iframe style={{borderRadius: '12px'}} src={spotifyEmbed} width="100%" height="152" frameBorder="0" allowFullScreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+                 </div>
+                 <button onClick={() => window.open(getFullSpotifyLink(), '_blank')} className="mt-4 w-full bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold py-2 rounded-lg text-sm transition-colors flex items-center justify-center gap-2 shadow-[0_0_10px_rgba(29,185,84,0.2)]">
+                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg> Open Full Playlist in Spotify App
+                 </button>
                </div>
             </div>
 
@@ -501,7 +501,7 @@ function App() {
         {currentView === 'exams' && <ExamTracker cloudExams={cloudData.exams || []} updateCloudData={updateCloudData} />}
         {currentView === 'fitness' && <FitnessTracker cloudFitness={cloudData.fitness || {}} updateCloudData={updateCloudData} />}
         {currentView === 'finance' && <FinanceTracker cloudFinance={cloudData.finance || {}} updateCloudData={updateCloudData} />}
-        {currentView === 'rewards' && <RewardSystem cloudRewards={cloudData.rewards || {}} updateCloudData={updateCloudData} />}
+        {currentView === 'rewards' && <RewardSystem cloudRewards={cloudData.rewards || {}} updateCloudData={updateCloudData} habits={habits} />}
         {currentView === 'library' && <Library cloudLibrary={cloudData.library || []} updateCloudData={updateCloudData} />}
         {currentView === 'donate' && <AnimalDonation cloudDonations={cloudData.donations || []} updateCloudData={updateCloudData} />}
         
