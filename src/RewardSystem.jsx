@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useLocalStorageSync } from './useLocalStorageSync'; // Ensure this matches your path!
 
 const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => {
   
   // --- THE ULTIMATE SOURCE OF TRUTH ---
-  // You can change these anytime. New users and existing users will instantly see 
-  // these updates, UNLESS they specifically customized that exact card themselves.
   const defaultCategories = [
     {
       id: 'wakeup', name: 'Rise Master', icon: '🌅', desc: 'Wake up at 5:30 AM',
@@ -81,49 +80,34 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
     }
   ];
 
-  // Notice how "categories" is no longer part of the saved state. We only save "userOverrides".
   const defaultState = { progress: {}, cheats: {}, claimed: [], userOverrides: {} };
   defaultCategories.forEach(c => {
     defaultState.progress[c.id] = 0;
     defaultState.cheats[c.id] = 0;
   });
 
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [data, setData] = useState(defaultState);
+  // 1. Clean Custom Hook State
+  const [data, setData] = useLocalStorageSync('rewardSystemData', defaultState);
   const [editingCategory, setEditingCategory] = useState(null); 
 
-  // 1. Load Data Securely
+  // 👇 THE FIX: "Write Lock" Shield 👇
+  // This records the exact millisecond you clicked a button
+  const lastWrite = useRef(0);
+
   useEffect(() => {
-    try {
-      const savedData = localStorage.getItem('rewardSystemData');
-      let parsed = savedData ? JSON.parse(savedData) : null;
-      let cloudMerged = null;
-      
-      if (cloudRewards && Object.keys(cloudRewards).length > 0) {
-        cloudMerged = { ...cloudRewards };
+    if (cloudRewards && Object.keys(cloudRewards).length > 0) {
+      // If 2.5 seconds have passed since your last click, it is safe to accept new data from the cloud!
+      if (Date.now() - lastWrite.current > 2500) {
+        setData(prev => {
+          if (JSON.stringify(prev) !== JSON.stringify(cloudRewards)) {
+            return cloudRewards;
+          }
+          return prev;
+        });
       }
-
-      let finalData = parsed || cloudMerged || defaultState;
-
-      // Ensure userOverrides object exists
-      if (!finalData.userOverrides) finalData.userOverrides = {};
-
-      setData(finalData);
-    } catch (e) {
-      console.error("Failed to load rewards from local storage", e);
     }
-    setIsLoaded(true);
-  }, [cloudRewards]);
-
-  // 2. Save Data on Change
-  useEffect(() => {
-    if (isLoaded) {
-      // To save space, we strip out any old 'categories' array from previous versions if it exists.
-      const dataToSave = { ...data };
-      delete dataToSave.categories; 
-      localStorage.setItem('rewardSystemData', JSON.stringify(dataToSave));
-    }
-  }, [data, isLoaded]);
+  }, [cloudRewards, setData]);
+  // 👆 END OF FIX 👆
 
   const safeData = {
     progress: data?.progress || {},
@@ -132,11 +116,9 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
     userOverrides: data?.userOverrides || {}
   };
 
-  // --- THE MERGE ENGINE (Overrides Pattern) ---
-  // This takes your React code (Source of Truth) and layers the user's specific customizations on top!
   const activeCategories = defaultCategories.map(cat => {
     const override = safeData.userOverrides[cat.id];
-    if (!override) return cat; // If user hasn't edited this, use the fresh default!
+    if (!override) return cat; 
     
     return {
       ...cat,
@@ -153,6 +135,7 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
   // --- Core Engine Functions ---
 
   const handleLog = (groupId) => {
+    lastWrite.current = Date.now(); // 🛡️ Activate Shield!
     setData(prev => {
       const prevProgress = prev?.progress || {};
       const newData = {
@@ -169,6 +152,7 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
   };
 
   const handleClaim = (groupId, tier, isFinalTier) => {
+    lastWrite.current = Date.now(); // 🛡️ Activate Shield!
     setData(prev => {
       let newClaimed = [...(Array.isArray(prev?.claimed) ? prev.claimed : []), tier.id];
       let newProgress = { ...(prev?.progress || {}) };
@@ -200,6 +184,7 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
     
     if (availableCheats > 0) {
       if (window.confirm(`You have ${availableCheats} Cheat Day(s) available for this task. \n\nDo you want to use 1 Cheat Day to keep your streak alive? (This will consume a cheat day but will NOT add a day to your progress).`)) {
+        lastWrite.current = Date.now(); // 🛡️ Activate Shield!
         setData(prev => {
           const prevCheats = prev?.cheats || {};
           const newData = {
@@ -216,6 +201,7 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
       }
     } else {
       if (window.confirm("You have 0 Cheat Days for this task. Your streak is broken.\n\nResetting all tiers for this category to 0.")) {
+        lastWrite.current = Date.now(); // 🛡️ Activate Shield!
         setData(prev => {
           const prevProgress = prev?.progress || {};
           const prevClaimed = Array.isArray(prev?.claimed) ? prev.claimed : [];
@@ -237,11 +223,10 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
     }
   };
 
-  // --- Edit System Helpers (Saving to Overrides) ---
   const saveCategoryEdit = (e) => {
     e.preventDefault();
+    lastWrite.current = Date.now(); // 🛡️ Activate Shield!
     setData(prev => {
-      // Build an override object containing ONLY the user's custom changes
       const categoryOverride = {
         name: editingCategory.name,
         icon: editingCategory.icon,
@@ -376,7 +361,7 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
                     </div>
                   </div>
                   
-                  {/* Right Side Controls: Settings Gear & Cheat Badge grouped together */}
+                  {/* Right Side Controls */}
                   <div className="flex items-center gap-3 shrink-0">
                     <button 
                       onClick={() => setEditingCategory(cat)} 
@@ -389,7 +374,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
                       </svg>
                     </button>
 
-                    {/* Task-Specific Cheat Badge */}
                     {cat.tiers.length > 1 && (
                       <div className={`px-3 py-1.5 rounded-lg border flex flex-col items-center shrink-0 shadow-sm ${availableCheats > 0 ? 'bg-red-900/20 border-red-500/50 text-red-400' : 'bg-gray-900/50 border-gray-700 text-gray-500'}`}>
                         <span className="text-[9px] font-bold uppercase tracking-wider">Cheat Days</span>

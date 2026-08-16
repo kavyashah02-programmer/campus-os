@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ReactApexChart from 'react-apexcharts';
-import { useLocalStorageSync } from './useLocalStorageSync'; // Brought in your custom hook!
+import { useLocalStorageSync } from './useLocalStorageSync'; 
 
 const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
   const getLocalDateStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -13,21 +13,22 @@ const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
   const [shakes, setShakes] = useState(0); 
   const [isSaved, setIsSaved] = useState(true);
 
-  // 1. REPLACED old logic with your clean custom hook!
   const [allData, setAllData] = useLocalStorageSync('fitnessTrackerData', cloudFitness || {});
 
-  // 👇 2. ADDED THE REAL-TIME BRIDGE 👇
+  // Echo Canceller Bridge
   useEffect(() => {
-    if (cloudFitness) {
-      setAllData(cloudFitness);
+    if (cloudFitness && Object.keys(cloudFitness).length > 0) {
+      setAllData(prev => {
+        if (JSON.stringify(prev) !== JSON.stringify(cloudFitness)) {
+          return cloudFitness;
+        }
+        return prev;
+      });
     }
-  }, [cloudFitness]);
-  // 👆 END OF BRIDGE 👆
+  }, [cloudFitness, setAllData]);
 
-  // CRITICAL FIX: Guarantee an object to prevent crashes if state is null
   const safeAllData = allData || {};
 
-  // Warn before closing browser tab if unsaved
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (!isSaved) { e.preventDefault(); e.returnValue = ''; }
@@ -36,6 +37,8 @@ const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isSaved]);
 
+  // FIX: Removed safeAllData from this dependency array! 
+  // Now it only loads numbers when you explicitly change the Date, stopping the glitch.
   useEffect(() => {
     const dayData = safeAllData[fitnessDate] || { exercise: 0, sleep: 0, water: 0, coffee: 0, shakes: 0 };
     setExercise(dayData.exercise || 0); 
@@ -44,7 +47,8 @@ const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
     setCoffee(dayData.coffee || 0); 
     setShakes(dayData.shakes || 0);
     setIsSaved(true);
-  }, [fitnessDate, safeAllData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitnessDate]); 
 
   const handleDateChange = (newDate) => {
     if (!isSaved && !window.confirm("You have unsaved fitness data for this date! Proceed without saving?")) return;
@@ -134,7 +138,6 @@ const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
               <svg className="w-5 h-5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg> Drinks & Fluids
             </h2>
             
-            {/* Water */}
             <div className="flex items-center justify-between p-3 bg-sky-900/20 rounded-xl border border-sky-900/30">
               <div className="flex items-center gap-3"><span className="text-xl">💧</span><span className="font-bold text-sm text-sky-400">Water</span></div>
               <div className="flex items-center bg-black rounded-xl border border-gray-700">
@@ -144,7 +147,6 @@ const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
               </div>
             </div>
 
-            {/* Coffee */}
             <div className="flex items-center justify-between p-3 bg-amber-900/20 rounded-xl border border-amber-900/30">
               <div className="flex items-center gap-3"><span className="text-xl">☕</span><span className="font-bold text-sm text-amber-400">Coffee</span></div>
               <div className="flex items-center bg-black rounded-xl border border-gray-700">
@@ -154,7 +156,6 @@ const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
               </div>
             </div>
 
-            {/* Fruit Shakes */}
             <div className="flex items-center justify-between p-3 bg-rose-900/20 rounded-xl border border-rose-900/30">
               <div className="flex items-center gap-3"><span className="text-xl">🥤</span><span className="font-bold text-sm text-rose-400">Fruit Shakes</span></div>
               <div className="flex items-center bg-black rounded-xl border border-gray-700">

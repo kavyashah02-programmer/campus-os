@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // <-- FIXED: Added useEffect here
 import { useLocalStorageSync } from './useLocalStorageSync'; // Ensure this path matches
 
 const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
-  const [courses, setCourses] = useLocalStorageSync('cgpaCalculatorData', cloudCGPA);
+  // CRITICAL FIX 1: Force incoming data to ALWAYS be an Array. 
+  // If Firebase accidentally sends an object from an old save, this converts it to []
+  const safeCloudCGPA = Array.isArray(cloudCGPA) ? cloudCGPA : [];
 
+  const [courses, setCourses] = useLocalStorageSync('cgpaCalculatorData', safeCloudCGPA);
 
+  // UPDATED BRIDGE: Only update if Firebase actually sends an Array
   useEffect(() => {
-    if (cloudCGPA) {
+    if (Array.isArray(cloudCGPA)) {
       setCourses(cloudCGPA); 
     }
   }, [cloudCGPA]);
@@ -23,7 +27,7 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
   // 10 Semesters for a 5-year programme
   const semesterOptions = Array.from({ length: 10 }, (_, i) => `Semester ${i + 1}`);
 
-  // CRITICAL FIX 1: Guarantee an array to prevent `.map` or `.reduce` crashes
+  // CRITICAL FIX 2: Guarantee an array to prevent `.map` or `.reduce` crashes
   const safeCourses = Array.isArray(courses) ? courses : [];
 
   const handleSave = (e) => {
@@ -74,7 +78,7 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
     setEditingId(null); setNewName(''); setNewCredits(''); setNewGrade('A'); setNewSemester('Semester 1'); 
   };
 
-  // CRITICAL FIX 2: Bulletproof math engine prevents NaN and division-by-zero crashes
+  // CRITICAL FIX 3: Bulletproof math engine prevents NaN and division-by-zero crashes
   const calculateGPA = (courseList) => {
     if (!courseList || courseList.length === 0) return { credits: 0, points: 0, gpa: "0.00" };
     
