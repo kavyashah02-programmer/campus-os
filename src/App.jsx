@@ -93,7 +93,7 @@ function App() {
   const [isStudying, setIsStudying] = useState(false);
   const [spotifyEmbed, setSpotifyEmbed] = useState('https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?theme=0');
 
-  // --- HABIT STATE (Hydrated by LocalStorage instantly to fix Dashboard Graph) ---
+  // --- LOCALSTORAGE PERSISTENT STATES (Habits & Focus Logs) ---
   const [habits, setHabits] = useState(() => {
     try {
       const saved = localStorage.getItem('habitTracker_habitsData');
@@ -113,14 +113,18 @@ function App() {
     return {};
   });
 
-  // Automatically save to LocalStorage whenever state changes
-  useEffect(() => {
-    localStorage.setItem('habitTracker_habitsData', JSON.stringify(habits));
-  }, [habits]);
+  const [focusLogs, setFocusLogs] = useState(() => {
+    try {
+      const saved = localStorage.getItem('focusTracker_logsData');
+      if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    return {};
+  });
 
-  useEffect(() => {
-    localStorage.setItem('habitTracker_logsData', JSON.stringify(habitLogs));
-  }, [habitLogs]);
+  // Automatically save to LocalStorage whenever state changes
+  useEffect(() => localStorage.setItem('habitTracker_habitsData', JSON.stringify(habits)), [habits]);
+  useEffect(() => localStorage.setItem('habitTracker_logsData', JSON.stringify(habitLogs)), [habitLogs]);
+  useEffect(() => localStorage.setItem('focusTracker_logsData', JSON.stringify(focusLogs)), [focusLogs]);
 
   // --------------------------------------------------------
   // 1. AUTHENTICATION LISTENER
@@ -147,9 +151,9 @@ function App() {
           const data = snap.data();
           setCloudData(data); 
           
-          // Hydrate the dashboard specific states
           if (data.habitLogs) setHabitLogs(data.habitLogs);
           if (data.habits) setHabits(data.habits);
+          if (data.focusLogs) setFocusLogs(data.focusLogs);
           if (data.spotifyEmbed) setSpotifyEmbed(data.spotifyEmbed);
         }
         setIsDataLoading(false);
@@ -165,23 +169,21 @@ function App() {
     setCloudData(prev => ({ ...prev, [databaseKey]: newData }));
   };
   
-  // Auto-sync dashboard habits & spotify to cloud when changed (Guarded against data wipe on refresh)
+  // Auto-sync dashboard states to cloud when changed
   useEffect(() => {
-    if (user && !isDataLoading && Object.keys(habitLogs).length > 0) {
-      updateCloudData('habitLogs', habitLogs);
-    }
+    if (user && !isDataLoading && Object.keys(habitLogs).length > 0) updateCloudData('habitLogs', habitLogs);
   }, [habitLogs, user, isDataLoading]);
 
   useEffect(() => {
-    if (user && !isDataLoading && habits.length > 0) {
-      updateCloudData('habits', habits);
-    }
+    if (user && !isDataLoading && habits.length > 0) updateCloudData('habits', habits);
   }, [habits, user, isDataLoading]);
 
   useEffect(() => {
-    if (user && !isDataLoading && spotifyEmbed) {
-      updateCloudData('spotifyEmbed', spotifyEmbed);
-    }
+    if (user && !isDataLoading && Object.keys(focusLogs).length > 0) updateCloudData('focusLogs', focusLogs);
+  }, [focusLogs, user, isDataLoading]);
+
+  useEffect(() => {
+    if (user && !isDataLoading && spotifyEmbed) updateCloudData('spotifyEmbed', spotifyEmbed);
   }, [spotifyEmbed, user, isDataLoading]);
 
 
@@ -231,25 +233,55 @@ function App() {
     return getLocalDateStr(d);
   });
   
+  const overviewCategories = last7Days.map(dStr => new Date(dStr).toLocaleDateString('en-US', {weekday: 'short'}));
+
+  // Math for Productivity Graph
   const overviewSeriesData = last7Days.map(dStr => {
     const logs = habitLogs[dStr] || {};
     const c = Object.values(logs).filter(Boolean).length;
     return habits.length > 0 ? Math.round((c / habits.length) * 100) : 0;
   });
-  const overviewCategories = last7Days.map(dStr => new Date(dStr).toLocaleDateString('en-US', {weekday: 'short'}));
+  
   const overviewOptions = { chart: { type: 'area', toolbar: { show: false }, background: 'transparent' }, colors: ['#10b981'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 90, 100] } }, dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 2 }, xaxis: { categories: overviewCategories, axisBorder: { show: false }, axisTicks: { show: false }, labels: { style: { colors: '#6b7280' } } }, yaxis: { show: false, min: 0, max: 100 }, grid: { show: false }, theme: { mode: 'dark' } };
   const overviewSeries = [{ name: 'Completion %', data: overviewSeriesData }];
 
+  // Math for Daily Focus Graph
+  const focusSeriesData = last7Days.map(dStr => {
+    const secs = focusLogs[dStr] || 0;
+    return Math.round(secs / 60); // Convert seconds to minutes for the chart
+  });
+
+  const focusOptions = { 
+    chart: { type: 'bar', toolbar: { show: false }, background: 'transparent' }, 
+    colors: ['#3b82f6'], 
+    plotOptions: { bar: { borderRadius: 4, columnWidth: '55%' } }, 
+    dataLabels: { enabled: false }, 
+    xaxis: { categories: overviewCategories, axisBorder: { show: false }, axisTicks: { show: false }, labels: { style: { colors: '#6b7280' } } }, 
+    yaxis: { labels: { formatter: (val) => `${val}m`, style: { colors: '#6b7280' } } }, 
+    grid: { borderColor: '#1f2937', strokeDashArray: 4 }, 
+    theme: { mode: 'dark' },
+    tooltip: { y: { formatter: (val) => `${val} mins` } }
+  };
+  const focusSeries = [{ name: 'Focus Time', data: focusSeriesData }];
 
   // --------------------------------------------------------
-  // 5. TIMERS & NOTIFICATIONS
+  // 5. TIMERS, LOGS, & NOTIFICATIONS
   // --------------------------------------------------------
+
+  // Save the current un-saved session to the graph
+  const saveSessionToLogs = (timeToSaveInSeconds) => {
+    if (timeToSaveInSeconds <= 0) return;
+    setFocusLogs(prev => {
+      const today = getLocalDateStr();
+      return { ...prev, [today]: (prev[today] || 0) + timeToSaveInSeconds };
+    });
+  };
+
   useEffect(() => {
     if (!user) return; 
     const clockInterval = setInterval(() => setTimeStr(new Date().toLocaleTimeString()), 1000);
     if (!("Notification" in window)) return;
     
-    // Cloud task notification sync
     const taskInterval = setInterval(() => {
       const currentTasks = cloudData.tasks || [];
       const now = new Date();
@@ -270,26 +302,30 @@ function App() {
     return () => { clearInterval(clockInterval); clearInterval(taskInterval); };
   }, [user, cloudData.tasks]);
 
+  // Main Timer Engine
   useEffect(() => {
     let timerInterval = null;
     if (isStudying) {
       timerInterval = setInterval(() => {
-        setStudyTime(prev => {
-          const newTime = prev + 1;
-          if (focusMode === 'timer' && newTime >= timerTarget * 60) {
-            setIsStudying(false);
-            setTimeout(() => alert("Target Reached! Great focus session."), 100);
-          }
-          return newTime;
-        });
+        setStudyTime(prev => prev + 1);
       }, 1000);
     }
     return () => clearInterval(timerInterval);
-  }, [isStudying, focusMode, timerTarget]);
+  }, [isStudying]);
+
+  // Auto-Save when Timer reaches Target
+  useEffect(() => {
+    if (isStudying && focusMode === 'timer' && studyTime >= timerTarget * 60) {
+      setIsStudying(false);
+      saveSessionToLogs(studyTime);
+      setStudyTime(0);
+      setTimeout(() => alert("Target Reached! Focus session automatically saved to your daily graph."), 100);
+    }
+  }, [studyTime, isStudying, focusMode, timerTarget]);
 
 
   // --------------------------------------------------------
-  // 6. AUTHENTICATION & HANDLERS
+  // 6. ACTION HANDLERS
   // --------------------------------------------------------
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
@@ -349,8 +385,32 @@ function App() {
     }
   };
 
+  // Timer Button Actions
   const toggleStudyTimer = () => setIsStudying(!isStudying);
-  const takeBreak = () => { alert("Taking a 10 minute break! Resetting focus tracker."); setIsStudying(false); setStudyTime(0); };
+  
+  const handleResetTimer = () => {
+    if (studyTime === 0) return;
+    if (window.confirm("Save your current minutes to the graph and reset the timer back to zero?")) {
+      saveSessionToLogs(studyTime);
+      setStudyTime(0);
+      setIsStudying(false);
+    }
+  };
+
+  const takeBreak = () => { 
+    saveSessionToLogs(studyTime);
+    setStudyTime(0);
+    setIsStudying(false);
+    alert("Taking a 10 minute break! Your session was saved to the daily graph."); 
+  };
+  
+  const handleModeSwitch = (mode) => {
+    if (studyTime > 0) saveSessionToLogs(studyTime);
+    setFocusMode(mode);
+    setStudyTime(0);
+    setIsStudying(false);
+  };
+
   const handleSpotifyLink = (e) => {
     let link = e.target.value;
     if (link.includes('spotify.com') && !link.includes('/embed/')) link = link.replace('spotify.com/', 'spotify.com/embed/');
@@ -451,10 +511,16 @@ function App() {
               </div>
             </header>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              <div className="col-span-1 xl:col-span-2 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg">
-                 <h3 className="text-gray-300 font-semibold text-sm uppercase tracking-wider mb-2">Weekly Productivity (Completion %)</h3>
+            {/* --- UPDATED GRAPH ROW --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="col-span-1 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg">
+                 <h3 className="text-emerald-400 font-semibold text-sm uppercase tracking-wider mb-2">Weekly Productivity</h3>
                  <ReactApexChart options={overviewOptions} series={overviewSeries} type="area" height={160} />
+              </div>
+
+              <div className="col-span-1 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg">
+                 <h3 className="text-blue-400 font-semibold text-sm uppercase tracking-wider mb-2">Daily Focus (Mins)</h3>
+                 <ReactApexChart options={focusOptions} series={focusSeries} type="bar" height={160} />
               </div>
 
               <div className="col-span-1 flex flex-col gap-6">
@@ -474,8 +540,8 @@ function App() {
                  <div className="flex justify-between items-center w-full mb-4 z-10">
                    <h3 className="text-blue-400 font-bold text-sm uppercase tracking-wider">Deep Work</h3>
                    <div className="flex bg-black p-1 rounded-lg border border-gray-800">
-                     <button onClick={() => { setFocusMode('stopwatch'); setStudyTime(0); setIsStudying(false); }} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-colors ${focusMode === 'stopwatch' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Stopwatch</button>
-                     <button onClick={() => { setFocusMode('timer'); setStudyTime(0); setIsStudying(false); }} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-colors ${focusMode === 'timer' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Timer</button>
+                     <button onClick={() => handleModeSwitch('stopwatch')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-colors ${focusMode === 'stopwatch' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Stopwatch</button>
+                     <button onClick={() => handleModeSwitch('timer')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-colors ${focusMode === 'timer' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Timer</button>
                    </div>
                  </div>
 
@@ -488,9 +554,13 @@ function App() {
 
                  <div className="text-6xl font-black text-white font-mono mb-6 z-10 drop-shadow-md">{formatTimer(displaySeconds)}</div>
                  
-                 <div className="flex gap-4 w-full px-8 z-10">
-                   <button onClick={toggleStudyTimer} className={`flex-1 py-3 rounded-xl font-bold text-white transition-colors shadow-lg ${isStudying ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'}`}>{isStudying ? 'Pause' : 'Start Focus'}</button>
-                   <button onClick={takeBreak} disabled={!canTakeBreak} className={`flex-1 py-3 rounded-xl font-bold transition-all ${canTakeBreak ? 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`}>Take 10m Break</button>
+                 {/* --- UPDATED TIMER BUTTONS --- */}
+                 <div className="flex gap-3 w-full px-4 z-10">
+                   <button onClick={toggleStudyTimer} className={`flex-1 py-3 rounded-xl font-bold text-white transition-colors shadow-lg ${isStudying ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'}`}>{isStudying ? 'Pause' : 'Start'}</button>
+                   
+                   <button onClick={handleResetTimer} className="flex-1 py-3 rounded-xl font-bold bg-red-900/30 text-red-500 hover:bg-red-500 hover:text-white border border-red-900/50 transition-colors shadow-lg">Reset</button>
+
+                   <button onClick={takeBreak} disabled={!canTakeBreak} className={`flex-1 py-3 rounded-xl font-bold transition-all ${canTakeBreak ? 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`}>Break</button>
                  </div>
                  {!canTakeBreak ? <p className="text-[10px] text-gray-500 mt-3 z-10">Break unlocks after 30 mins of active focus.</p> : <p className="text-[10px] text-emerald-500 font-bold mt-3 z-10">Break Unlocked!</p>}
                </div>
