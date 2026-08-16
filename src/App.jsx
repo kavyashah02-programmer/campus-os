@@ -185,7 +185,7 @@ function App() {
     const userRef = doc(db, 'users', user.uid);
     await setDoc(userRef, { [databaseKey]: newData }, { merge: true });
   };
-  
+
   // Auto-sync dashboard states to cloud when changed locally (Guarded to prevent infinite loops)
   useEffect(() => {
     if (user && !isDataLoading && Object.keys(habitLogs).length > 0) {
@@ -614,7 +614,7 @@ function App() {
         {currentView === 'tasks' && <TaskManager cloudTasks={cloudData.tasks || []} updateCloudData={updateCloudData} />}
         {currentView === 'planner' && <DailyPlanner cloudPlanner={cloudData.planner || []} updateCloudData={updateCloudData} />}
         {currentView === 'habits' && <HabitTracker habits={habits} setHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} updateCloudData={updateCloudData} />}
-        {currentView === 'cgpa' && <CGPACalculator cloudCGPA={cloudData.cgpa || {}} updateCloudData={updateCloudData} />}
+        {currentView === 'cgpa' && <CGPACalculator cloudCGPA={cloudData.cgpa || []} updateCloudData={updateCloudData} />}
         {currentView === 'exams' && <ExamTracker cloudExams={cloudData.exams || []} updateCloudData={updateCloudData} />}
         {currentView === 'fitness' && <FitnessTracker cloudFitness={cloudData.fitness || {}} updateCloudData={updateCloudData} />}
         {currentView === 'finance' && <FinanceTracker cloudFinance={cloudData.finance || {}} updateCloudData={updateCloudData} />}
