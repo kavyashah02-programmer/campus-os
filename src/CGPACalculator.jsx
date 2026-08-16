@@ -4,6 +4,13 @@ import { useLocalStorageSync } from './useLocalStorageSync'; // Ensure this path
 const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
   const [courses, setCourses] = useLocalStorageSync('cgpaCalculatorData', cloudCGPA);
 
+
+  useEffect(() => {
+    if (cloudCGPA) {
+      setCourses(cloudCGPA); 
+    }
+  }, [cloudCGPA]);
+
   const [editingId, setEditingId] = useState(null);
   const [newName, setNewName] = useState('');
   const [newCredits, setNewCredits] = useState('');

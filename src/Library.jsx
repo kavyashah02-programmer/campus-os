@@ -53,8 +53,15 @@ const Library = ({ cloudLibrary = {}, updateCloudData }) => {
   const defaultCategories = ['Notes', 'PPTs', 'Mind Maps', 'Shortcuts', 'Short Notes'];
   
   // 1. Folders now use persistent local storage so the structure survives refreshes
-  const [folders, setFolders] = useLocalStorageSync('libraryFoldersData', safeCloudLibrary.folders || []);
-  
+const [folders, setFolders] = useLocalStorageSync('libraryFoldersData', safeCloudLibrary.folders || []);
+
+  // 👇 ADDED SAFETY CHECK 👇
+  useEffect(() => {
+    if (cloudLibrary && cloudLibrary.folders) {
+      setFolders(cloudLibrary.folders); 
+    }
+  }, [cloudLibrary]);
+
   // CRITICAL FIX: Guarantee an array to prevent .map() and .filter() crashes
   const safeFolders = Array.isArray(folders) ? folders : [];
 

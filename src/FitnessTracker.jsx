@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ReactApexChart from 'react-apexcharts';
+import { useLocalStorageSync } from './useLocalStorageSync'; // Brought in your custom hook!
 
 const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
   const getLocalDateStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -12,38 +13,16 @@ const FitnessTracker = ({ cloudFitness = {}, updateCloudData }) => {
   const [shakes, setShakes] = useState(0); 
   const [isSaved, setIsSaved] = useState(true);
 
-  // --- NEW OBJECT-BASED SYNC LOGIC ---
-  const [allData, setAllData] = useState({});
-  const [isLoaded, setIsLoaded] = useState(false);
+  // 1. REPLACED old logic with your clean custom hook!
+  const [allData, setAllData] = useLocalStorageSync('fitnessTrackerData', cloudFitness || {});
 
-  // 1. Load from LocalStorage securely AFTER mount
+  // 👇 2. ADDED THE REAL-TIME BRIDGE 👇
   useEffect(() => {
-    try {
-      const savedData = localStorage.getItem('fitnessTrackerData');
-      if (savedData) {
-        setAllData(JSON.parse(savedData));
-      } else if (cloudFitness && Object.keys(cloudFitness).length > 0) {
-        setAllData(cloudFitness);
-      }
-    } catch (e) {
-      console.error("Failed to load fitness data from local storage", e);
+    if (cloudFitness) {
+      setAllData(cloudFitness);
     }
-    setIsLoaded(true); 
-  }, []);
-
-  // 2. Save to LocalStorage whenever allData changes (after initial load)
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem('fitnessTrackerData', JSON.stringify(allData));
-    }
-  }, [allData, isLoaded]);
-
-  // 3. Intelligently merge incoming cloud data (Objects instead of Arrays)
-  useEffect(() => {
-    if (isLoaded && cloudFitness && Object.keys(cloudFitness).length > 0) {
-      setAllData(prevData => ({ ...prevData, ...cloudFitness }));
-    }
-  }, [cloudFitness, isLoaded]);
+  }, [cloudFitness]);
+  // 👆 END OF BRIDGE 👆
 
   // CRITICAL FIX: Guarantee an object to prevent crashes if state is null
   const safeAllData = allData || {};

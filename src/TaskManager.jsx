@@ -5,6 +5,12 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   // 1. Replaced the 40 lines of manual load/save/merge logic with your custom hook!
   const [tasks, setTasks] = useLocalStorageSync('taskManagerTasks', cloudTasks);
 
+  useEffect(() => {
+    if (cloudTasks) {
+      setTasks(cloudTasks); 
+    }
+  }, [cloudTasks]);
+
   // 2. CRITICAL FIX: Guarantee an array to prevent crashes during mapping/filtering
   const safeTasks = Array.isArray(tasks) ? tasks : [];
 

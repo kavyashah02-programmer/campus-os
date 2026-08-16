@@ -16,8 +16,14 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
   ];
 
   // 1. Array sync for laundry items using custom hook
-  const [items, setItems] = useLocalStorageSync('laundryItemsData', cloudLaundry.items || []);
+ const [items, setItems] = useLocalStorageSync('laundryItemsData', cloudLaundry.items || []);
 
+  // 👇 CORRECTED BRIDGE 👇
+  useEffect(() => {
+    if (cloudLaundry && cloudLaundry.items) {
+      setItems(cloudLaundry.items); // Make sure to use setItems here!
+    }
+  }, [cloudLaundry]);
   // 2. Manual local storage for totalDue (since it's a number, not an array)
   const [totalDue, setTotalDue] = useState(() => {
     const saved = localStorage.getItem('laundryTotalDueData');

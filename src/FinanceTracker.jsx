@@ -13,6 +13,16 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
   const [accounts, setAccounts] = useLocalStorageSync('financeAccountsData', cloudFinance.accounts || []);
   const [transactions, setTransactions] = useLocalStorageSync('financeTransactionsData', cloudFinance.transactions || []);
 
+  // 👇 NEW REAL-TIME SYNC BRIDGE 👇
+  // This listens for live cloud updates and injects them instantly for both accounts and transactions
+  useEffect(() => {
+    if (cloudFinance) {
+      if (cloudFinance.accounts) setAccounts(cloudFinance.accounts);
+      if (cloudFinance.transactions) setTransactions(cloudFinance.transactions);
+    }
+  }, [cloudFinance]);
+  // 👆 END OF NEW BRIDGE 👆
+
   // 2. CRITICAL FIX: Guarantee an array to prevent crashes
   const safeAccounts = Array.isArray(accounts) && accounts.length > 0 ? accounts : defaultAccounts;
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
@@ -289,6 +299,7 @@ const FinanceTracker = ({ cloudFinance = {}, updateCloudData }) => {
               <div>
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">{type === 'transfer' ? 'From Account' : 'Account'} *</label>
                 <select required value={accountId} onChange={(e) => setAccountId(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-blue-500 outline-none">
+                  <option value="" disabled>Select Account</option>
                   <option value="" disabled>Select Account</option>
                   {lockedAccounts.map(a => <option key={a.id} value={a.id}>{a.name} (₹{getCurrentBalance(a.id, editingTxId)})</option>)}
                 </select>

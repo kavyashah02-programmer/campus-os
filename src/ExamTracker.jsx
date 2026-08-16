@@ -5,6 +5,12 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
   // 1. Replaced the old state and useEffects with your custom hook!
   const [exams, setExams] = useLocalStorageSync('examTrackerData', cloudExams);
 
+  useEffect(() => {
+    if (cloudExams) {
+      setExams(cloudExams); 
+    }
+  }, [cloudExams]);
+
   const [selectedExamId, setSelectedExamId] = useState(null);
   const [editingExamId, setEditingExamId] = useState(null);
   

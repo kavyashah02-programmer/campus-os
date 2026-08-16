@@ -177,9 +177,13 @@ function App() {
 
   const updateCloudData = async (databaseKey, newData) => {
     if (!user) return;
+    
+    // 1. INSTANT UPDATE: Change the UI immediately so it feels lightning fast
+    setCloudData(prev => ({ ...prev, [databaseKey]: newData }));
+    
+    // 2. CLOUD SYNC: Save to Firebase in the background
     const userRef = doc(db, 'users', user.uid);
     await setDoc(userRef, { [databaseKey]: newData }, { merge: true });
-    // We removed setCloudData here because onSnapshot will instantly catch this write automatically!
   };
   
   // Auto-sync dashboard states to cloud when changed locally (Guarded to prevent infinite loops)

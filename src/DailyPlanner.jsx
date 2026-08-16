@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // <-- Added useEffect here
 import { useLocalStorageSync } from './useLocalStorageSync'; // Ensure this path matches where you saved the file!
 
 // 1. Accept the new cloud props from App.jsx
@@ -21,6 +21,15 @@ const DailyPlanner = ({ cloudPlanner = [], updateCloudData }) => {
   const [blocks, setBlocks] = useLocalStorageSync('dailyPlannerBlocks', cloudPlanner);
   // -------------------------------------------------------------------------------
 
+  // 👇 NEW REAL-TIME SYNC BRIDGE 👇
+  // This listens for live cloud updates and injects them instantly
+  useEffect(() => {
+    if (cloudPlanner) {
+      setBlocks(cloudPlanner);
+    }
+  }, [cloudPlanner]);
+  // 👆 END OF NEW BRIDGE 👆
+
   const [nowMins, setNowMins] = useState((new Date().getHours() * 60) + new Date().getMinutes());
   
   const hours = Array.from({ length: 24 }, (_, i) => {
@@ -36,7 +45,7 @@ const DailyPlanner = ({ cloudPlanner = [], updateCloudData }) => {
   };
 
   const getBlockStyle = (start, end, blockColor) => {
-    if (!start || !end) return {};
+    if (!start || end == null) return {};
     const startMinutes = timeToMins(start);
     let endMinutes = timeToMins(end);
     if (endMinutes <= startMinutes) endMinutes = startMinutes + 30; 
