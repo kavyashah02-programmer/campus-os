@@ -4,7 +4,8 @@ import ReactApexChart from 'react-apexcharts';
 // --- FIREBASE IMPORTS ---
 import { auth, db } from './firebase'; 
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'; 
+// UPGRADE: Added onSnapshot for real-time live syncing
+import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore'; 
 
 // --- COMPONENTS ---
 import Sidebar from './Sidebar';
@@ -138,27 +139,39 @@ function App() {
   }, []);
 
   // --------------------------------------------------------
-  // 2. MASTER CLOUD SYNC LOGIC
+  // 2. MASTER CLOUD SYNC LOGIC (UPGRADED TO REAL-TIME)
   // --------------------------------------------------------
   useEffect(() => {
     if (user) {
       setIsDataLoading(true);
-      const fetchAllData = async () => {
-        const userRef = doc(db, 'users', user.uid);
-        const snap = await getDoc(userRef);
-        
+      const userRef = doc(db, 'users', user.uid);
+      
+      // REAL-TIME LISTENER: Constantly watches for cross-device updates!
+      const unsubscribe = onSnapshot(userRef, (snap) => {
         if (snap.exists()) {
           const data = snap.data();
           setCloudData(data); 
           
-          if (data.habitLogs) setHabitLogs(data.habitLogs);
-          if (data.habits) setHabits(data.habits);
-          if (data.focusLogs) setFocusLogs(data.focusLogs);
-          if (data.spotifyEmbed) setSpotifyEmbed(data.spotifyEmbed);
+          // SMART UPDATE: Only update local screen if the cloud has different data
+          // This prevents infinite save-loops between devices
+          if (data.habitLogs) {
+             setHabitLogs(prev => JSON.stringify(prev) !== JSON.stringify(data.habitLogs) ? data.habitLogs : prev);
+          }
+          if (data.habits) {
+             setHabits(prev => JSON.stringify(prev) !== JSON.stringify(data.habits) ? data.habits : prev);
+          }
+          if (data.focusLogs) {
+             setFocusLogs(prev => JSON.stringify(prev) !== JSON.stringify(data.focusLogs) ? data.focusLogs : prev);
+          }
+          if (data.spotifyEmbed) {
+             setSpotifyEmbed(prev => prev !== data.spotifyEmbed ? data.spotifyEmbed : prev);
+          }
         }
         setIsDataLoading(false);
-      };
-      fetchAllData();
+      });
+
+      // Close the live connection when user logs out to save memory
+      return () => unsubscribe();
     }
   }, [user]);
 
@@ -166,25 +179,33 @@ function App() {
     if (!user) return;
     const userRef = doc(db, 'users', user.uid);
     await setDoc(userRef, { [databaseKey]: newData }, { merge: true });
-    setCloudData(prev => ({ ...prev, [databaseKey]: newData }));
+    // We removed setCloudData here because onSnapshot will instantly catch this write automatically!
   };
   
-  // Auto-sync dashboard states to cloud when changed
+  // Auto-sync dashboard states to cloud when changed locally (Guarded to prevent infinite loops)
   useEffect(() => {
-    if (user && !isDataLoading && Object.keys(habitLogs).length > 0) updateCloudData('habitLogs', habitLogs);
-  }, [habitLogs, user, isDataLoading]);
+    if (user && !isDataLoading && Object.keys(habitLogs).length > 0) {
+      if (JSON.stringify(habitLogs) !== JSON.stringify(cloudData.habitLogs)) updateCloudData('habitLogs', habitLogs);
+    }
+  }, [habitLogs, user, isDataLoading, cloudData.habitLogs]);
 
   useEffect(() => {
-    if (user && !isDataLoading && habits.length > 0) updateCloudData('habits', habits);
-  }, [habits, user, isDataLoading]);
+    if (user && !isDataLoading && habits.length > 0) {
+      if (JSON.stringify(habits) !== JSON.stringify(cloudData.habits)) updateCloudData('habits', habits);
+    }
+  }, [habits, user, isDataLoading, cloudData.habits]);
 
   useEffect(() => {
-    if (user && !isDataLoading && Object.keys(focusLogs).length > 0) updateCloudData('focusLogs', focusLogs);
-  }, [focusLogs, user, isDataLoading]);
+    if (user && !isDataLoading && Object.keys(focusLogs).length > 0) {
+      if (JSON.stringify(focusLogs) !== JSON.stringify(cloudData.focusLogs)) updateCloudData('focusLogs', focusLogs);
+    }
+  }, [focusLogs, user, isDataLoading, cloudData.focusLogs]);
 
   useEffect(() => {
-    if (user && !isDataLoading && spotifyEmbed) updateCloudData('spotifyEmbed', spotifyEmbed);
-  }, [spotifyEmbed, user, isDataLoading]);
+    if (user && !isDataLoading && spotifyEmbed) {
+      if (spotifyEmbed !== cloudData.spotifyEmbed) updateCloudData('spotifyEmbed', spotifyEmbed);
+    }
+  }, [spotifyEmbed, user, isDataLoading, cloudData.spotifyEmbed]);
 
 
   // --------------------------------------------------------
