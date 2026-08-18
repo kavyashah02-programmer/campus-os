@@ -2,16 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useLocalStorageSync } from './useLocalStorageSync'; // Custom hook imported from src/
 
 const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
-  // 1. Replaced the 40 lines of manual load/save/merge logic with your custom hook!
   const [tasks, setTasks] = useLocalStorageSync('taskManagerTasks', cloudTasks);
 
   useEffect(() => {
     if (cloudTasks) {
       setTasks(cloudTasks); 
     }
-  }, [cloudTasks]);
+  }, [cloudTasks, setTasks]);
 
-  // 2. CRITICAL FIX: Guarantee an array to prevent crashes during mapping/filtering
   const safeTasks = Array.isArray(tasks) ? tasks : [];
 
   const [editingId, setEditingId] = useState(null);
@@ -146,10 +144,17 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     setEditingId(null); setTitle(''); setTime(''); setDeadline(''); setDeadlineTime(''); setDesc(''); setImage(null); setThingsToBring(''); setPlace('');
   };
 
+  // --- UPDATED: Date Spanning Logic ---
   const isTaskVisibleOnDate = (task, targetDateStr) => {
     if (task.excludedDates && task.excludedDates.includes(targetDateStr)) return false;
 
-    if (task.date === targetDateStr) return true;
+    // If it has a deadline, show it on EVERY day between start date and deadline!
+    if (task.deadline) {
+      if (targetDateStr >= task.date && targetDateStr <= task.deadline) return true;
+    } else {
+      if (task.date === targetDateStr) return true;
+    }
+    
     if (!task.repeat || task.repeat === 'none') return false;
     
     const taskDate = new Date(task.date);
@@ -173,27 +178,51 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     return false;
   };
 
-  // --- SORTING LOGIC: Date -> Timeline (Time OR Deadline Time) -> Creation ---
   const selectedDateTasks = safeTasks
     .filter(t => isTaskVisibleOnDate(t, selectedDate))
     .sort((a, b) => {
-      // 1. Sort by Scheduled Date
       const dateA = a.date || '';
       const dateB = b.date || '';
       if (dateA !== dateB) return dateA.localeCompare(dateB);
 
-      // 2. Sort by Timeline (Uses 'Time' first, falls back to 'Deadline Time')
       const timelineA = a.time || a.deadlineTime || '24:00';
       const timelineB = b.time || b.deadlineTime || '24:00';
       if (timelineA !== timelineB) return timelineA.localeCompare(timelineB);
 
-      // 3. Fallback to creation order
       return (a.createdAt || 0) - (b.createdAt || 0);
     });
   
+  // --- NEW: Missed / Overdue Tasks Logic ---
+  const now = new Date();
+  const missedTasks = safeTasks.filter(task => {
+    if (task.repeat && task.repeat !== 'none') return false; // Exclude repeating habits
+
+    // Determine task's absolute deadline
+    const targetDate = task.deadline || task.date;
+    const targetTime = task.deadline ? (task.deadlineTime || '23:59') : (task.time || '23:59');
+    
+    // Check completion. If spanning, checking it off on ANY day marks the whole span done.
+    const isDone = task.deadline 
+      ? (task.completedDates && task.completedDates.some(d => d >= task.date && d <= task.deadline))
+      : (task.completedDates && task.completedDates.includes(task.date));
+
+    if (isDone) return false;
+
+    // Check if real-world time has passed the deadline
+    const taskEndObj = new Date(`${targetDate}T${targetTime}`);
+    return now > taskEndObj;
+  }).sort((a, b) => {
+    const targetA = a.deadline || a.date;
+    const targetB = b.deadline || b.date;
+    return targetA.localeCompare(targetB);
+  });
+
   const handleCarryForward = () => {
     const pendingTasks = selectedDateTasks.filter(t => {
-      return t.completedDates ? !t.completedDates.includes(selectedDate) : !t.completed;
+      const isDone = t.deadline 
+        ? (t.completedDates && t.completedDates.some(d => d >= t.date && d <= t.deadline))
+        : (t.completedDates ? t.completedDates.includes(selectedDate) : t.completed);
+      return !isDone;
     });
 
     if (pendingTasks.length === 0) {
@@ -212,7 +241,12 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
         if (pt.repeat === 'none' || !pt.repeat) {
           const idx = updatedTasks.findIndex(x => x.id === pt.id);
           if (idx > -1) {
-            updatedTasks[idx] = { ...updatedTasks[idx], date: nextDateStr };
+            // Update both start and deadline to push it forward
+            updatedTasks[idx] = { 
+              ...updatedTasks[idx], 
+              date: nextDateStr,
+              deadline: pt.deadline ? nextDateStr : pt.deadline 
+            };
           }
         } else {
           const idx = updatedTasks.findIndex(x => x.id === pt.id);
@@ -250,6 +284,75 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDay(year, month);
   const realTodayStr = new Date().toISOString().split('T')[0];
+
+  // Helper to render task cards (Used for both Action Items & Missed Tasks)
+  const renderTaskCard = (task, renderContextDate) => {
+    // Determine if complete. Spanned tasks check the whole range.
+    const isDone = task.deadline 
+      ? (task.completedDates && task.completedDates.some(d => d >= task.date && d <= task.deadline))
+      : (task.completedDates ? task.completedDates.includes(renderContextDate) : task.completed);
+
+    return (
+      <div 
+        key={`${task.id}-${renderContextDate}`} 
+        className={`p-5 rounded-xl border transition-all flex flex-col gap-3 ${isDone ? 'bg-[#1a1a1a] border-gray-800 opacity-50' : 'bg-black border-gray-700 shadow-md'}`} 
+        style={{ borderLeftWidth: '4px', borderLeftColor: isDone ? '#374151' : task.color }}
+      >
+        <div className="flex justify-between items-start">
+          <div className="flex items-start gap-4 w-full">
+            <input 
+              type="checkbox" 
+              checked={isDone} 
+              // Always pass the task date or deadline to mark it securely
+              onChange={() => toggleTask(task.id, task.deadline || task.date)} 
+              className="mt-1 w-5 h-5 accent-indigo-500 cursor-pointer shrink-0" 
+            />
+            <div className="flex-1">
+              <h4 className={`text-base font-bold ${isDone ? 'line-through text-gray-500' : 'text-white'}`}>
+                {task.title}
+              </h4>
+              
+              <div className="flex flex-wrap gap-2 mt-2">
+                {Boolean(task.deadline || task.deadlineTime) && (
+                  <span className={`text-[10px] px-2 py-1 rounded shadow-sm font-bold flex items-center gap-1 ${now > new Date(`${task.deadline || task.date}T${task.deadlineTime || '23:59'}`) && !isDone ? 'text-red-400 bg-red-900/20 border border-red-900/50' : 'text-orange-400 bg-orange-900/20 border border-orange-900/50'}`}>
+                    ⚠️ Due: {[task.deadline, task.deadlineTime].filter(Boolean).join(' at ')}
+                  </span>
+                )}
+                
+                {task.time && <span className="text-[10px] text-gray-300 bg-gray-800 px-2 py-1 rounded border border-gray-700">🕒 {task.time}</span>}
+                {task.place && <span className="text-[10px] text-gray-300 bg-gray-800 px-2 py-1 rounded border border-gray-700">📍 {task.place}</span>}
+                {task.thingsToBring && <span className="text-[10px] text-emerald-400 bg-emerald-900/20 border border-emerald-900/50 px-2 py-1 rounded shadow-sm">🎒 {task.thingsToBring}</span>}
+                {task.repeat !== 'none' && <span className="text-[10px] text-blue-400 bg-blue-900/20 border border-blue-900/50 px-2 py-1 rounded">
+                  🔁 {task.repeat === 'biweekly' ? 'Bi-weekly' : task.repeat}
+                </span>}
+              </div>
+              
+              {task.desc && (
+                <p className="text-sm text-gray-400 mt-3 bg-gray-900/50 p-3 rounded-lg border border-gray-800 leading-relaxed">
+                  {task.desc}
+                </p>
+              )}
+              
+              {task.image && (
+                <div className="mt-3 relative overflow-hidden rounded-lg border border-gray-700 inline-block">
+                  <img src={task.image} alt="Attachment" className="max-h-48 object-cover hover:scale-105 transition-transform duration-300" />
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="flex shrink-0 gap-3 ml-4">
+            <button onClick={() => handleEdit(task.id)} className="text-gray-500 hover:text-white transition-colors bg-gray-900 p-2 rounded-lg">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+            </button>
+            <button onClick={() => deleteTask(task.id, renderContextDate)} title="Delete for this day" className="text-gray-500 hover:text-red-400 transition-colors bg-gray-900 p-2 rounded-lg">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
@@ -361,6 +464,19 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
         {/* RIGHT COLUMN: Lists & Calendar */}
         <div className="lg:col-span-2 space-y-6">
           
+          {/* --- NEW SECTION: MISSED / OVERDUE TASKS --- */}
+          {missedTasks.length > 0 && (
+            <div className="bg-red-950/20 border border-red-900/50 rounded-2xl p-6 shadow-[0_0_15px_rgba(220,38,38,0.1)]">
+              <h2 className="text-lg font-bold text-red-400 mb-4 flex items-center gap-2 border-b border-red-900/30 pb-3">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                Missed / Overdue Tasks
+              </h2>
+              <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                {missedTasks.map(task => renderTaskCard(task, task.deadline || task.date))}
+              </div>
+            </div>
+          )}
+
           <div className="bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-gray-800 pb-4 gap-4">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -396,69 +512,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
                   No tasks scheduled for this date.
                 </p>
               ) : (
-                selectedDateTasks.map(task => {
-                  const isDoneForDate = task.completedDates ? task.completedDates.includes(selectedDate) : task.completed;
-                  return (
-                    <div 
-                      key={task.id} 
-                      className={`p-5 rounded-xl border transition-all flex flex-col gap-3 ${isDoneForDate ? 'bg-[#1a1a1a] border-gray-800 opacity-50' : 'bg-black border-gray-700 shadow-md'}`} 
-                      style={{ borderLeftWidth: '4px', borderLeftColor: isDoneForDate ? '#374151' : task.color }}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-start gap-4 w-full">
-                          <input 
-                            type="checkbox" 
-                            checked={isDoneForDate} 
-                            onChange={() => toggleTask(task.id, selectedDate)} 
-                            className="mt-1 w-5 h-5 accent-indigo-500 cursor-pointer shrink-0" 
-                          />
-                          <div className="flex-1">
-                            <h4 className={`text-base font-bold ${isDoneForDate ? 'line-through text-gray-500' : 'text-white'}`}>
-                              {task.title}
-                            </h4>
-                            
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {/* --- BULLETPROOF DEADLINE RENDERER --- */}
-                              {Boolean(task.deadline || task.deadlineTime) && (
-                                <span className="text-[10px] text-red-400 bg-red-900/20 border border-red-900/50 px-2 py-1 rounded shadow-sm font-bold flex items-center gap-1">
-                                  ⚠️ Due: {[task.deadline, task.deadlineTime].filter(Boolean).join(' at ')}
-                                </span>
-                              )}
-                              
-                              {task.time && <span className="text-[10px] text-gray-300 bg-gray-800 px-2 py-1 rounded border border-gray-700">🕒 {task.time}</span>}
-                              {task.place && <span className="text-[10px] text-gray-300 bg-gray-800 px-2 py-1 rounded border border-gray-700">📍 {task.place}</span>}
-                              {task.thingsToBring && <span className="text-[10px] text-emerald-400 bg-emerald-900/20 border border-emerald-900/50 px-2 py-1 rounded shadow-sm">🎒 {task.thingsToBring}</span>}
-                              {task.repeat !== 'none' && <span className="text-[10px] text-blue-400 bg-blue-900/20 border border-blue-900/50 px-2 py-1 rounded">
-                                🔁 {task.repeat === 'biweekly' ? 'Bi-weekly' : task.repeat}
-                              </span>}
-                            </div>
-                            
-                            {task.desc && (
-                              <p className="text-sm text-gray-400 mt-3 bg-gray-900/50 p-3 rounded-lg border border-gray-800 leading-relaxed">
-                                {task.desc}
-                              </p>
-                            )}
-                            
-                            {task.image && (
-                              <div className="mt-3 relative overflow-hidden rounded-lg border border-gray-700 inline-block">
-                                <img src={task.image} alt="Attachment" className="max-h-48 object-cover hover:scale-105 transition-transform duration-300" />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        
-                        <div className="flex shrink-0 gap-3 ml-4">
-                          <button onClick={() => handleEdit(task.id)} className="text-gray-500 hover:text-white transition-colors bg-gray-900 p-2 rounded-lg">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                          </button>
-                          <button onClick={() => deleteTask(task.id, selectedDate)} title="Delete for this day" className="text-gray-500 hover:text-red-400 transition-colors bg-gray-900 p-2 rounded-lg">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
+                selectedDateTasks.map(task => renderTaskCard(task, selectedDate))
               )}
             </div>
           </div>
@@ -505,7 +559,10 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
                     <span className={`text-xs font-bold mb-1.5 ${isToday ? 'text-blue-400' : 'text-gray-400'}`}>{dayNum}</span>
                     <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-1 pr-1">
                       {dayTasks.map(t => {
-                         const isDone = t.completedDates ? t.completedDates.includes(dayStr) : t.completed;
+                         const isDone = t.deadline 
+                           ? (t.completedDates && t.completedDates.some(d => d >= t.date && d <= t.deadline))
+                           : (t.completedDates ? t.completedDates.includes(dayStr) : t.completed);
+                           
                          const deadlineText = (t.deadline || t.deadlineTime) ? `Due: {[t.deadline, t.deadlineTime].filter(Boolean).join(' at ')}\n` : '';
                          const tooltip = `${t.title}\n${deadlineText}Left-click: Delete\nRight-click: Edit`;
                          return (
