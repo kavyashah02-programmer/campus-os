@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactApexChart from 'react-apexcharts';
 
 // --- FIREBASE IMPORTS ---
@@ -92,6 +92,7 @@ function App() {
   const [timerTarget, setTimerTarget] = useState(45); 
   const [studyTime, setStudyTime] = useState(0); 
   const [isStudying, setIsStudying] = useState(false);
+  const timerStartRef = useRef(null);
   const [spotifyEmbed, setSpotifyEmbed] = useState('https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?theme=0');
 
   // --- LOCALSTORAGE PERSISTENT STATES (Habits & Focus Logs) ---
@@ -328,14 +329,23 @@ function App() {
   }, [user, cloudData.tasks]);
 
   // Main Timer Engine
+// Main Timer Engine (Bulletproof System Clock Version)
   useEffect(() => {
     let timerInterval = null;
+    
     if (isStudying) {
+      // Record the exact real-world start time (accounting for any previously elapsed time)
+      timerStartRef.current = Date.now() - (studyTime * 1000);
+      
       timerInterval = setInterval(() => {
-        setStudyTime(prev => prev + 1);
+        // Calculate exact elapsed time using the system clock instead of just adding +1
+        const exactSeconds = Math.floor((Date.now() - timerStartRef.current) / 1000);
+        setStudyTime(exactSeconds);
       }, 1000);
     }
+    
     return () => clearInterval(timerInterval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStudying]);
 
   // Auto-Save when Timer reaches Target
