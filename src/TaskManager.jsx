@@ -144,11 +144,9 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     setEditingId(null); setTitle(''); setTime(''); setDeadline(''); setDeadlineTime(''); setDesc(''); setImage(null); setThingsToBring(''); setPlace('');
   };
 
-  // --- UPDATED: Date Spanning Logic ---
   const isTaskVisibleOnDate = (task, targetDateStr) => {
     if (task.excludedDates && task.excludedDates.includes(targetDateStr)) return false;
 
-    // If it has a deadline, show it on EVERY day between start date and deadline!
     if (task.deadline) {
       if (targetDateStr >= task.date && targetDateStr <= task.deadline) return true;
     } else {
@@ -178,43 +176,44 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     return false;
   };
 
+  // --- NEW: Universal Timestamp Calculator for Sorting ---
+  const getTaskDeadlineTimestamp = (task) => {
+    const targetDate = task.deadline || task.date;
+    const targetTime = task.deadlineTime || task.time || '23:59';
+    return new Date(`${targetDate}T${targetTime}`).getTime();
+  };
+
   const selectedDateTasks = safeTasks
     .filter(t => isTaskVisibleOnDate(t, selectedDate))
     .sort((a, b) => {
-      const dateA = a.date || '';
-      const dateB = b.date || '';
-      if (dateA !== dateB) return dateA.localeCompare(dateB);
-
-      const timelineA = a.time || a.deadlineTime || '24:00';
-      const timelineB = b.time || b.deadlineTime || '24:00';
-      if (timelineA !== timelineB) return timelineA.localeCompare(timelineB);
-
+      const timeA = getTaskDeadlineTimestamp(a);
+      const timeB = getTaskDeadlineTimestamp(b);
+      
+      // Sort by the soonest deadline absolute time first
+      if (timeA !== timeB) return timeA - timeB;
+      
+      // Fallback to creation order if times are identical
       return (a.createdAt || 0) - (b.createdAt || 0);
     });
   
-  // --- NEW: Missed / Overdue Tasks Logic ---
   const now = new Date();
   const missedTasks = safeTasks.filter(task => {
-    if (task.repeat && task.repeat !== 'none') return false; // Exclude repeating habits
+    if (task.repeat && task.repeat !== 'none') return false; 
 
-    // Determine task's absolute deadline
     const targetDate = task.deadline || task.date;
     const targetTime = task.deadline ? (task.deadlineTime || '23:59') : (task.time || '23:59');
     
-    // Check completion. If spanning, checking it off on ANY day marks the whole span done.
     const isDone = task.deadline 
       ? (task.completedDates && task.completedDates.some(d => d >= task.date && d <= task.deadline))
       : (task.completedDates && task.completedDates.includes(task.date));
 
     if (isDone) return false;
 
-    // Check if real-world time has passed the deadline
     const taskEndObj = new Date(`${targetDate}T${targetTime}`);
     return now > taskEndObj;
   }).sort((a, b) => {
-    const targetA = a.deadline || a.date;
-    const targetB = b.deadline || b.date;
-    return targetA.localeCompare(targetB);
+    // Also use the precise timestamp sorter for Missed Tasks
+    return getTaskDeadlineTimestamp(a) - getTaskDeadlineTimestamp(b);
   });
 
   const handleCarryForward = () => {
@@ -241,7 +240,6 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
         if (pt.repeat === 'none' || !pt.repeat) {
           const idx = updatedTasks.findIndex(x => x.id === pt.id);
           if (idx > -1) {
-            // Update both start and deadline to push it forward
             updatedTasks[idx] = { 
               ...updatedTasks[idx], 
               date: nextDateStr,
@@ -285,9 +283,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   const firstDay = getFirstDay(year, month);
   const realTodayStr = new Date().toISOString().split('T')[0];
 
-  // Helper to render task cards (Used for both Action Items & Missed Tasks)
   const renderTaskCard = (task, renderContextDate) => {
-    // Determine if complete. Spanned tasks check the whole range.
     const isDone = task.deadline 
       ? (task.completedDates && task.completedDates.some(d => d >= task.date && d <= task.deadline))
       : (task.completedDates ? task.completedDates.includes(renderContextDate) : task.completed);
@@ -303,7 +299,6 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
             <input 
               type="checkbox" 
               checked={isDone} 
-              // Always pass the task date or deadline to mark it securely
               onChange={() => toggleTask(task.id, task.deadline || task.date)} 
               className="mt-1 w-5 h-5 accent-indigo-500 cursor-pointer shrink-0" 
             />
@@ -364,7 +359,6 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT COLUMN: Form */}
         <div className="lg:col-span-1 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg h-fit">
           <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2 border-b border-gray-800 pb-3">
             <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -461,10 +455,8 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
           </form>
         </div>
 
-        {/* RIGHT COLUMN: Lists & Calendar */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* --- NEW SECTION: MISSED / OVERDUE TASKS --- */}
           {missedTasks.length > 0 && (
             <div className="bg-red-950/20 border border-red-900/50 rounded-2xl p-6 shadow-[0_0_15px_rgba(220,38,38,0.1)]">
               <h2 className="text-lg font-bold text-red-400 mb-4 flex items-center gap-2 border-b border-red-900/30 pb-3">

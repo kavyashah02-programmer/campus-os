@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useLocalStorageSync } from './useLocalStorageSync'; // Updated path since it's in src/
+import { useLocalStorageSync } from './useLocalStorageSync'; 
 
 const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
-  // 1. Replaced the old state and useEffects with your custom hook!
   const [exams, setExams] = useLocalStorageSync('examTrackerData', cloudExams);
 
   useEffect(() => {
     if (cloudExams) {
       setExams(cloudExams); 
     }
-  }, [cloudExams]);
+  }, [cloudExams, setExams]);
 
   const [selectedExamId, setSelectedExamId] = useState(null);
   const [editingExamId, setEditingExamId] = useState(null);
@@ -17,17 +16,17 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
   const [examTitle, setExamTitle] = useState('');
   const [examSubject, setExamSubject] = useState('');
   const [examDate, setExamDate] = useState('');
+  const [examMarks, setExamMarks] = useState(''); // NEW: Exam marks state
+  
   const [newTopic, setNewTopic] = useState('');
+  const [newTopicUnit, setNewTopicUnit] = useState(''); // NEW: Topic unit state
 
-  // 2. CRITICAL FIX: Guarantee an array to prevent crashes
   const safeExams = Array.isArray(exams) ? exams : [];
 
-  // Ensure an exam is selected if available
   useEffect(() => {
     if (!selectedExamId && safeExams.length > 0) {
       setSelectedExamId(safeExams[0].id);
     } else if (selectedExamId && !safeExams.find(e => e.id === selectedExamId)) {
-      // If the selected exam was deleted from another device
       setSelectedExamId(safeExams.length > 0 ? safeExams[0].id : null);
     }
   }, [safeExams, selectedExamId]);
@@ -39,24 +38,26 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
     
     let updatedExams;
     if (editingExamId) {
-      updatedExams = safeExams.map(ex => ex.id === editingExamId ? { ...ex, title: examTitle, subject: examSubject, date: examDate } : ex);
+      updatedExams = safeExams.map(ex => ex.id === editingExamId ? { ...ex, title: examTitle, subject: examSubject, date: examDate, marks: examMarks } : ex);
       setEditingExamId(null);
     } else {
-      const newExam = { id: Date.now(), title: examTitle, subject: examSubject, date: examDate, topics: [] };
+      const newExam = { id: Date.now(), title: examTitle, subject: examSubject, date: examDate, marks: examMarks, topics: [] };
       updatedExams = [...safeExams, newExam];
       setSelectedExamId(newExam.id);
     }
     
-    // Update local state AND push to the cloud universally
     setExams(updatedExams);
     if (updateCloudData) updateCloudData('exams', updatedExams);
     
-    setExamTitle(''); setExamSubject(''); setExamDate('');
+    setExamTitle(''); setExamSubject(''); setExamDate(''); setExamMarks('');
   };
 
   const handleEditExam = (exam) => {
     setEditingExamId(exam.id);
-    setExamTitle(exam.title); setExamSubject(exam.subject); setExamDate(exam.date);
+    setExamTitle(exam.title || ''); 
+    setExamSubject(exam.subject || ''); 
+    setExamDate(exam.date || '');
+    setExamMarks(exam.marks || '');
   };
 
   const deleteExam = (id) => {
@@ -75,11 +76,16 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
     e.preventDefault();
     if (!newTopic || !selectedExamId) return;
     
-    const updatedExams = safeExams.map(ex => ex.id === selectedExamId ? { ...ex, topics: [...ex.topics, { id: Date.now(), name: newTopic, studied: false, revised: false }] } : ex);
+    const updatedExams = safeExams.map(ex => ex.id === selectedExamId ? { 
+      ...ex, 
+      topics: [...ex.topics, { id: Date.now(), name: newTopic, unit: newTopicUnit, studied: false, revised: false }] 
+    } : ex);
     
     setExams(updatedExams);
     if (updateCloudData) updateCloudData('exams', updatedExams);
+    
     setNewTopic('');
+    setNewTopicUnit('');
   };
 
   const toggleTopicState = (examId, topicId, field) => {
@@ -131,7 +137,9 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
                       <button onClick={(e) => { e.stopPropagation(); deleteExam(exam.id); }} className="text-gray-600 hover:text-red-400"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
                     </div>
                   </div>
-                  <p className="text-[10px] text-gray-500 mt-1">{exam.subject}</p>
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    {exam.subject} {exam.marks ? `• ${exam.marks} Marks` : ''}
+                  </p>
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-[10px] text-gray-400 bg-gray-800 px-2 py-0.5 rounded">{exam.date}</span>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${daysLeft < 0 ? 'bg-gray-800 text-gray-500' : daysLeft <= 3 ? 'bg-red-900/30 text-red-400' : 'bg-purple-900/30 text-purple-400'}`}>{daysLeft < 0 ? 'Passed' : `${daysLeft} Days Left`}</span>
@@ -142,14 +150,19 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
           </div>
 
           <div className="p-4 border-t border-gray-800 bg-black/50">
-            <h3 className="text-xs font-bold text-gray-400 mb-2">{editingExamId ? 'Edit Exam Date' : 'Add New Exam'}</h3>
+            <h3 className="text-xs font-bold text-gray-400 mb-2">{editingExamId ? 'Edit Exam' : 'Add New Exam'}</h3>
             <form onSubmit={handleExamSubmit} className="space-y-3">
               <input type="text" required value={examTitle} onChange={e => setExamTitle(e.target.value)} placeholder="Exam Title" className="w-full bg-black border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none" />
-              <input type="text" value={examSubject} onChange={e => setExamSubject(e.target.value)} placeholder="Subject" className="w-full bg-black border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none" />
+              
+              <div className="flex gap-2">
+                <input type="text" value={examSubject} onChange={e => setExamSubject(e.target.value)} placeholder="Subject" className="flex-1 bg-black border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none" />
+                <input type="number" value={examMarks} onChange={e => setExamMarks(e.target.value)} placeholder="Total Marks" className="w-24 bg-black border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none" />
+              </div>
+
               <input type="date" required value={examDate} onChange={e => setExamDate(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:border-purple-500 outline-none [color-scheme:dark]" />
               <div className="flex gap-2">
                  <button type="submit" className="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-lg text-sm transition-colors">{editingExamId ? 'Update' : 'Add'}</button>
-                 {editingExamId && <button type="button" onClick={() => {setEditingExamId(null); setExamTitle(''); setExamSubject(''); setExamDate('');}} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 rounded-lg text-sm transition-colors">Cancel</button>}
+                 {editingExamId && <button type="button" onClick={() => {setEditingExamId(null); setExamTitle(''); setExamSubject(''); setExamDate(''); setExamMarks('');}} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 rounded-lg text-sm transition-colors">Cancel</button>}
               </div>
             </form>
           </div>
@@ -164,7 +177,7 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
                 <div className="flex justify-between items-start">
                   <div>
                     <h2 className="text-2xl font-bold text-white">{currentExam.title}</h2>
-                    <p className="text-gray-400 text-sm">{currentExam.subject}</p>
+                    <p className="text-gray-400 text-sm">{currentExam.subject} {currentExam.marks ? `• ${currentExam.marks} Marks Total` : ''}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">Time Remaining</p>
@@ -174,7 +187,8 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
                   </div>
                 </div>
                 <form onSubmit={addTopic} className="mt-6 flex gap-3">
-                  <input type="text" value={newTopic} onChange={e => setNewTopic(e.target.value)} placeholder="Add a new chapter or topic..." className="flex-1 bg-black border border-gray-700 text-white rounded-xl px-4 py-2 text-sm focus:border-purple-500 outline-none" />
+                  <input type="text" value={newTopicUnit} onChange={e => setNewTopicUnit(e.target.value)} placeholder="Unit (e.g., 2.1)" className="w-32 bg-black border border-gray-700 text-white rounded-xl px-4 py-2 text-sm focus:border-purple-500 outline-none" />
+                  <input type="text" value={newTopic} onChange={e => setNewTopic(e.target.value)} placeholder="Add a new chapter or topic name..." className="flex-1 bg-black border border-gray-700 text-white rounded-xl px-4 py-2 text-sm focus:border-purple-500 outline-none" required />
                   <button type="submit" className="bg-gray-800 hover:bg-gray-700 text-white font-bold px-6 py-2 rounded-xl border border-gray-700">Add Topic</button>
                 </form>
               </div>
@@ -187,7 +201,10 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
                       <div key={topic.id} className={`flex items-center justify-between p-3 rounded-xl border ${topic.studied ? 'bg-black/50 border-gray-800 opacity-60' : 'bg-black border-gray-700'}`}>
                         <label className="flex items-center gap-3 cursor-pointer flex-1">
                           <input type="checkbox" checked={topic.studied} onChange={() => toggleTopicState(currentExam.id, topic.id, 'studied')} className="w-5 h-5 accent-blue-500 rounded" />
-                          <span className={`text-sm font-semibold select-none ${topic.studied ? 'line-through text-gray-500' : 'text-gray-200'}`}>{topic.name}</span>
+                          <span className={`text-sm font-semibold select-none ${topic.studied ? 'line-through text-gray-500' : 'text-gray-200'}`}>
+                            {topic.unit && <span className="text-purple-400 mr-2 opacity-80">{topic.unit}</span>}
+                            {topic.name}
+                          </span>
                         </label>
                         <button onClick={() => deleteTopic(currentExam.id, topic.id)} className="text-gray-600 hover:text-red-400"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
                       </div>
@@ -203,8 +220,11 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
                         <label className="flex items-center gap-3 cursor-pointer flex-1">
                           <input type="checkbox" checked={topic.revised} onChange={() => toggleTopicState(currentExam.id, topic.id, 'revised')} disabled={!topic.studied} className="w-5 h-5 accent-purple-500 rounded disabled:opacity-30" />
                           <div className="flex flex-col">
-                             <span className={`text-sm font-semibold select-none ${topic.revised ? 'text-purple-400' : !topic.studied ? 'text-gray-600' : 'text-gray-200'}`}>{topic.name}</span>
-                             {!topic.studied && <span className="text-[9px] text-red-500/70">Complete self-study first</span>}
+                             <span className={`text-sm font-semibold select-none ${topic.revised ? 'text-purple-400' : !topic.studied ? 'text-gray-600' : 'text-gray-200'}`}>
+                               {topic.unit && <span className="text-purple-400 mr-2 opacity-80">{topic.unit}</span>}
+                               {topic.name}
+                             </span>
+                             {!topic.studied && <span className="text-[9px] text-red-500/70 mt-0.5">Complete self-study first</span>}
                           </div>
                         </label>
                       </div>
