@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useLocalStorageSync } from './useLocalStorageSync'; 
 
-const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
+const ExamTracker = ({ cloudExams = [], cloudPlanner = [], updateCloudData }) => {
+  // --- EXAM STATE ---
   const [exams, setExams] = useLocalStorageSync('examTrackerData', cloudExams);
-
   useEffect(() => {
-    if (cloudExams) {
-      setExams(cloudExams); 
-    }
+    if (cloudExams) setExams(cloudExams); 
   }, [cloudExams, setExams]);
+
+  // --- CROSS-COMPONENT PLANNER STATE ---
+  const [plannerBlocks, setPlannerBlocks] = useLocalStorageSync('dailyPlannerBlocks', cloudPlanner);
+  useEffect(() => {
+    if (cloudPlanner) setPlannerBlocks(cloudPlanner);
+  }, [cloudPlanner, setPlannerBlocks]);
 
   const [selectedExamId, setSelectedExamId] = useState(null);
   const [editingExamId, setEditingExamId] = useState(null);
@@ -26,8 +30,8 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
   const [newTopicUnit, setNewTopicUnit] = useState(''); 
 
   const safeExams = Array.isArray(exams) ? exams : [];
+  const safePlannerBlocks = Array.isArray(plannerBlocks) ? plannerBlocks : [];
 
-  // Sort exams: Nearest upcoming exam first
   const sortedExams = [...safeExams].sort((a, b) => {
     return new Date(a.date).getTime() - new Date(b.date).getTime();
   });
@@ -40,14 +44,13 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
     }
   }, [safeExams, selectedExamId, sortedExams]);
 
-  // --- DURATION CALCULATOR ---
   const calculateDuration = (start, end) => {
     if (!start || !end) return '';
     const [startH, startM] = start.split(':').map(Number);
     const [endH, endM] = end.split(':').map(Number);
     
     let diff = (endH * 60 + endM) - (startH * 60 + startM);
-    if (diff < 0) diff += 24 * 60; // Just in case it crosses midnight
+    if (diff < 0) diff += 24 * 60; 
     
     const hrs = Math.floor(diff / 60);
     const mins = diff % 60;
@@ -57,14 +60,43 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
     return `${hrs} hrs ${mins} mins`;
   };
 
+  // --- PLANNER CROSS-SYNC HELPER LOGIC ---
+  const timeToMins = (t) => {
+    if (!t) return 0;
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  const isBlockOnDate = (block, targetDateStr) => {
+    if (block.excludedDates && block.excludedDates.includes(targetDateStr)) return false;
+    if (block.date === targetDateStr) return true;
+    if (block.repeat === 'Once' || !block.repeat) return false;
+
+    const bDate = new Date(block.date);
+    const tDate = new Date(targetDateStr);
+    bDate.setHours(0,0,0,0); tDate.setHours(0,0,0,0);
+    
+    if (tDate < bDate) return false;
+
+    if (block.repeat === 'Daily') return true;
+    if (block.repeat === 'Weekly' && bDate.getDay() === tDate.getDay()) return true;
+    if (block.repeat === 'Monthly' && bDate.getDate() === tDate.getDate()) return true;
+    if (block.repeat === 'Biweekly') {
+      const diffDays = Math.round((tDate.getTime() - bDate.getTime()) / (1000 * 3600 * 24));
+      if (diffDays % 14 === 0) return true;
+    }
+    return false;
+  };
+
   // --- SAVE / UPDATE EXAM ---
   const handleExamSubmit = (e) => {
     e.preventDefault();
     if (!examTitle || !examDate) return;
     
     let updatedExams;
+    const currentExamId = editingExamId || Date.now();
     const examPayload = {
-      title: examTitle, subject: examSubject, date: examDate, marks: examMarks,
+      id: currentExamId, title: examTitle, subject: examSubject, date: examDate, marks: examMarks,
       startTime: examStartTime, endTime: examEndTime, description: examDesc, type: examType
     };
 
@@ -72,13 +104,63 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
       updatedExams = safeExams.map(ex => ex.id === editingExamId ? { ...ex, ...examPayload } : ex);
       setEditingExamId(null);
     } else {
-      const newExam = { id: Date.now(), ...examPayload, topics: [] };
-      updatedExams = [...safeExams, newExam];
-      setSelectedExamId(newExam.id);
+      updatedExams = [...safeExams, { ...examPayload, topics: [] }];
+      setSelectedExamId(currentExamId);
     }
     
     setExams(updatedExams);
     if (updateCloudData) updateCloudData('exams', updatedExams);
+
+    // --- DAILY PLANNER OVERRIDE LOGIC ---
+    if (examStartTime && examEndTime) {
+      const exStartMins = timeToMins(examStartTime);
+      const exEndMins = timeToMins(examEndTime);
+      const examBlockId = `exam-${currentExamId}`;
+      let updatedPlanner = [...safePlannerBlocks];
+
+      // 1. Remove or exclude overlapping blocks on that specific day
+      updatedPlanner = updatedPlanner.map(block => {
+        // Skip the exam block itself if we are editing
+        if (block.id === examBlockId) return block;
+
+        if (isBlockOnDate(block, examDate)) {
+          const bStart = timeToMins(block.startTime);
+          const bEnd = timeToMins(block.endTime);
+          
+          if (bStart < exEndMins && bEnd > exStartMins) {
+            // Overlap detected!
+            if (block.repeat === 'Once' || !block.repeat) {
+              return null; // Delete single occurrence completely
+            } else {
+              // Add exception to recurring block so it only skips the exam day
+              return { ...block, excludedDates: [...(block.excludedDates || []), examDate] };
+            }
+          }
+        }
+        return block;
+      }).filter(Boolean);
+
+      // 2. Clear old version of this exam block if updating
+      updatedPlanner = updatedPlanner.filter(b => b.id !== examBlockId);
+
+      // 3. Inject new Exam Block
+      updatedPlanner.push({
+        id: examBlockId,
+        title: `Exam: ${examTitle}`,
+        date: examDate,
+        startTime: examStartTime,
+        endTime: examEndTime,
+        repeat: 'Once',
+        color: '#a855f7', // Purple
+        location: '',
+        description: `${examSubject} ${examType ? `(${examType})` : ''} - System Auto-Block`,
+        excludedDates: []
+      });
+
+      setPlannerBlocks(updatedPlanner);
+      if (updateCloudData) updateCloudData('planner', updatedPlanner);
+    }
+    // -------------------------------------
     
     setExamTitle(''); setExamSubject(''); setExamDate(''); setExamMarks('');
     setExamStartTime(''); setExamEndTime(''); setExamDesc(''); setExamType('');
@@ -94,7 +176,6 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
     setExamEndTime(exam.endTime || '');
     setExamDesc(exam.description || '');
     setExamType(exam.type || '');
-    // Auto scroll down to form
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   };
 
@@ -109,6 +190,12 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
       const remaining = safeExams.filter(e => e.id !== id);
       setExams(remaining);
       if (updateCloudData) updateCloudData('exams', remaining);
+      
+      // Auto-cleanup the daily planner block
+      const cleanedPlanner = safePlannerBlocks.filter(b => b.id !== `exam-${id}`);
+      setPlannerBlocks(cleanedPlanner);
+      if (updateCloudData) updateCloudData('planner', cleanedPlanner);
+
       if (selectedExamId === id) setSelectedExamId(remaining.length > 0 ? remaining[0].id : null);
     }
   };
@@ -155,7 +242,7 @@ const ExamTracker = ({ cloudExams = [], updateCloudData }) => {
       <header className="bg-[#121212] rounded-2xl border border-gray-800 p-5 shadow-lg flex justify-between items-center shrink-0">
         <div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight">Exam & Syllabus Tracker</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Track study progress and revision cycles before test day.</p>
+          <p className="text-gray-400 text-sm mt-0.5">Track study progress and auto-sync exams to the Daily Planner.</p>
         </div>
       </header>
 

@@ -625,7 +625,7 @@ function App() {
         {currentView === 'planner' && <DailyPlanner cloudPlanner={cloudData.planner || []} updateCloudData={updateCloudData} />}
         {currentView === 'habits' && <HabitTracker habits={habits} setHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} updateCloudData={updateCloudData} />}
         {currentView === 'cgpa' && <CGPACalculator cloudCGPA={cloudData.cgpa || []} updateCloudData={updateCloudData} />}
-        {currentView === 'exams' && <ExamTracker cloudExams={cloudData.exams || []} updateCloudData={updateCloudData} />}
+        {currentView === 'exams' && <ExamTracker cloudExams={cloudData.exams || []} cloudPlanner={cloudData.planner || []} updateCloudData={updateCloudData} />}
         {currentView === 'fitness' && <FitnessTracker cloudFitness={cloudData.fitness || {}} updateCloudData={updateCloudData} />}
         {currentView === 'finance' && <FinanceTracker cloudFinance={cloudData.finance || {}} updateCloudData={updateCloudData} />}
         {currentView === 'rewards' && <RewardSystem cloudRewards={cloudData.rewards || {}} updateCloudData={updateCloudData} habits={habits} />}
