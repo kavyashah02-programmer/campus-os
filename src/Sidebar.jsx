@@ -4,6 +4,7 @@ const Sidebar = ({ currentView, setCurrentView }) => {
   // All navigation modules for CampusOS
   const navItems = [
     { id: 'dashboard', icon: '📊', label: 'Dashboard', color: 'text-blue-500' },
+    { id: 'subjects', icon: '📖', label: 'Subjects', color: 'text-fuchsia-500' },
     { id: 'tasks', icon: '✅', label: 'Task Manager', color: 'text-indigo-500' },
     { id: 'planner', icon: '📅', label: 'Daily Planner', color: 'text-purple-500' },
     { id: 'habits', icon: '🔄', label: 'Habit Tracker', color: 'text-emerald-500' },
@@ -14,8 +15,7 @@ const Sidebar = ({ currentView, setCurrentView }) => {
     { id: 'library', icon: '📚', label: 'Digital Library', color: 'text-blue-400' },
     { id: 'laundry', icon: '🧺', label: 'Laundry Centre', color: 'text-cyan-500' },
     { id: 'rewards', icon: '🎁', label: 'Rewards', color: 'text-orange-500' },
-    { id: 'donate', icon: '❤️', label: 'Animal Donation', color: 'text-rose-500' },
-    { id: 'subjects', icon: '📖', label: 'Subjects', color: 'text-fuchsia-500' }
+    { id: 'donate', icon: '❤️', label: 'Animal Donation', color: 'text-rose-500' }
   ];
 
   return (
