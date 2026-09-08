@@ -23,7 +23,6 @@ import RewardSystem from './RewardSystem';
 import Library from './Library';
 import AnimalDonation from './AnimalDonation';
 import MotivationalQuote from './MotivationalQuote';
-
 const MAX_DEVICES = 2;
 
 // --- DEVICE VERIFICATION LOGIC ---
