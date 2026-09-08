@@ -8,6 +8,7 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, on
 import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore'; 
 
 // --- COMPONENTS ---
+import Subjects from './Subjects';
 import Sidebar from './Sidebar';
 import HabitHeatmap from './HabitHeatmap';
 import LaundryTracker from './LaundryTracker';
@@ -21,7 +22,7 @@ import FinanceTracker from './FinanceTracker';
 import RewardSystem from './RewardSystem';
 import Library from './Library';
 import AnimalDonation from './AnimalDonation';
-import Subjects from './Subjects';
+
 
 const MAX_DEVICES = 2;
 
@@ -624,14 +625,15 @@ function App() {
         {currentView === 'tasks' && <TaskManager cloudTasks={cloudData.tasks || []} updateCloudData={updateCloudData} />}
         {currentView === 'planner' && <DailyPlanner cloudPlanner={cloudData.planner || []} updateCloudData={updateCloudData} />}
         {currentView === 'habits' && <HabitTracker habits={habits} setHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} updateCloudData={updateCloudData} />}
-        {currentView === 'cgpa' && <CGPACalculator cloudCGPA={cloudData.cgpa || []} updateCloudData={updateCloudData} />}
-        {currentView === 'exams' && <ExamTracker cloudExams={cloudData.exams || []} cloudPlanner={cloudData.planner || []} updateCloudData={updateCloudData} />}
+        {currentView === 'cgpa' && <CGPACalculator cloudCGPA={cloudData.cgpa || []} cloudSubjects={cloudData.subjects || []} updateCloudData={updateCloudData} />}        
+        {currentView === 'exams' && <ExamTracker cloudExams={cloudData.exams || []} cloudPlanner={cloudData.planner || []} cloudSubjects={cloudData.subjects || []} updateCloudData={updateCloudData} />}
         {currentView === 'fitness' && <FitnessTracker cloudFitness={cloudData.fitness || {}} updateCloudData={updateCloudData} />}
         {currentView === 'finance' && <FinanceTracker cloudFinance={cloudData.finance || {}} updateCloudData={updateCloudData} />}
         {currentView === 'rewards' && <RewardSystem cloudRewards={cloudData.rewards || {}} updateCloudData={updateCloudData} habits={habits} />}
         {currentView === 'library' && <Library cloudLibrary={cloudData.library || []} updateCloudData={updateCloudData} />}
         {currentView === 'donate' && <AnimalDonation cloudDonations={cloudData.donations || []} updateCloudData={updateCloudData} />}
-        
+        {currentView === 'subjects' && <Subjects cloudSubjects={cloudData.subjects || []} updateCloudData={updateCloudData} />}
+
         {currentView === 'laundry' && (
           <div className="animate-in fade-in duration-500 h-full max-w-4xl mx-auto">
              <header className="mb-8"><h2 className="text-3xl font-bold text-white">Hostel Laundry Centre</h2></header>
