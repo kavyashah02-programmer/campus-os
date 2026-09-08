@@ -1,46 +1,32 @@
-import React, { useState, useEffect } from 'react'; // <-- FIXED: Added useEffect here
-import { useLocalStorageSync } from './useLocalStorageSync'; // Ensure this path matches
+import React, { useState, useEffect } from 'react'; 
+import { useLocalStorageSync } from './useLocalStorageSync';
 
-const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
-  // CRITICAL FIX 1: Force incoming data to ALWAYS be an Array. 
-  // If Firebase accidentally sends an object from an old save, this converts it to []
+const CGPACalculator = ({ cloudCGPA = [], cloudSubjects = [], updateCloudData }) => {
   const safeCloudCGPA = Array.isArray(cloudCGPA) ? cloudCGPA : [];
-
   const [courses, setCourses] = useLocalStorageSync('cgpaCalculatorData', safeCloudCGPA);
+  const [subjects] = useLocalStorageSync('subjectsData', cloudSubjects); // Pull in the master list
 
-  // UPDATED BRIDGE: Only update if Firebase actually sends an Array
   useEffect(() => {
-    if (Array.isArray(cloudCGPA)) {
-      setCourses(cloudCGPA); 
-    }
-  }, [cloudCGPA]);
+    if (Array.isArray(cloudCGPA)) setCourses(cloudCGPA); 
+  }, [cloudCGPA, setCourses]);
+
+  const safeSubjects = Array.isArray(subjects) ? subjects : [];
+  const safeCourses = Array.isArray(courses) ? courses : [];
 
   const [editingId, setEditingId] = useState(null);
   const [newName, setNewName] = useState('');
   const [newCredits, setNewCredits] = useState('');
   const [newGrade, setNewGrade] = useState('A');
-  const [newSemester, setNewSemester] = useState('Semester 1'); // NEW: Semester tracking
+  const [newSemester, setNewSemester] = useState('Semester 1'); 
 
-  // Exact BITS Pilani Scale
   const gradeScale = { 'A': 10, 'A-': 9, 'B': 8, 'B-': 7, 'C': 6, 'C-': 5, 'D': 4, 'E': 2 };
-  
-  // 10 Semesters for a 5-year programme
   const semesterOptions = Array.from({ length: 10 }, (_, i) => `Semester ${i + 1}`);
-
-  // CRITICAL FIX 2: Guarantee an array to prevent `.map` or `.reduce` crashes
-  const safeCourses = Array.isArray(courses) ? courses : [];
 
   const handleSave = (e) => {
     e.preventDefault();
     if (!newName || !newCredits) return;
     
-    const courseData = { 
-      id: editingId || Date.now(), 
-      name: newName, 
-      credits: Number(newCredits), 
-      grade: newGrade,
-      semester: newSemester
-    };
+    const courseData = { id: editingId || Date.now(), name: newName, credits: Number(newCredits), grade: newGrade, semester: newSemester };
     
     let updatedCourses;
     if (editingId) {
@@ -59,12 +45,7 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
   const handleEdit = (id) => {
     const c = safeCourses.find(x => x.id === id);
     if (!c) return;
-    setEditingId(c.id); 
-    setNewName(c.name); 
-    setNewCredits(c.credits); 
-    setNewGrade(c.grade);
-    setNewSemester(c.semester || 'Semester 1');
-    
+    setEditingId(c.id); setNewName(c.name); setNewCredits(c.credits); setNewGrade(c.grade); setNewSemester(c.semester || 'Semester 1');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -78,21 +59,16 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
     setEditingId(null); setNewName(''); setNewCredits(''); setNewGrade('A'); setNewSemester('Semester 1'); 
   };
 
-  // CRITICAL FIX 3: Bulletproof math engine prevents NaN and division-by-zero crashes
   const calculateGPA = (courseList) => {
     if (!courseList || courseList.length === 0) return { credits: 0, points: 0, gpa: "0.00" };
-    
     const credits = courseList.reduce((sum, c) => sum + (Number(c.credits) || 0), 0);
     const points = courseList.reduce((sum, c) => sum + ((Number(c.credits) || 0) * (gradeScale[c.grade] || 0)), 0);
     const gpa = credits === 0 ? "0.00" : (points / credits).toFixed(2);
-    
     return { credits, points, gpa };
   };
 
-  // Calculate Overall CGPA
   const overall = calculateGPA(safeCourses);
 
-  // Group courses by semester for SGPA
   const coursesBySemester = safeCourses.reduce((acc, course) => {
     const sem = course.semester || 'Semester 1';
     if (!acc[sem]) acc[sem] = [];
@@ -100,16 +76,13 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
     return acc;
   }, {});
 
-  // Sort semesters logically (Sem 1, Sem 2, ... Sem 10)
   const sortedSemesters = Object.keys(coursesBySemester).sort((a, b) => {
-    const numA = parseInt(a.replace(/\D/g, '')) || 0;
-    const numB = parseInt(b.replace(/\D/g, '')) || 0;
-    return numA - numB;
+    return (parseInt(a.replace(/\D/g, '')) || 0) - (parseInt(b.replace(/\D/g, '')) || 0);
   });
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-500 h-full flex flex-col">
-      <header className="bg-[#121212] rounded-2xl border border-gray-800 p-5 shadow-lg flex justify-between items-center">
+      <header className="bg-[#121212] rounded-2xl border border-gray-800 p-5 shadow-lg flex justify-between items-center shrink-0">
         <div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight">CGPA Calculator</h1>
           <p className="text-gray-400 text-sm mt-1">Total Credits: {overall.credits}</p>
@@ -122,7 +95,6 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
         
-        {/* ADD/EDIT FORM */}
         <div className="lg:col-span-1 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg h-fit">
           <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2 border-b border-gray-800 pb-3">
             <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
@@ -131,7 +103,12 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
           <form onSubmit={handleSave} className="space-y-4">
             <div>
               <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Subject Name *</label>
-              <input type="text" required value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 outline-none transition-colors" placeholder="e.g., Data Structures" />
+              {/* UPDATED: Dynamic Dropdown */}
+              <select required value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 outline-none transition-colors">
+                <option value="" disabled>Select Subject</option>
+                {safeSubjects.length === 0 && <option value="" disabled>⚠️ Go to Subjects module to add subjects</option>}
+                {safeSubjects.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
@@ -167,7 +144,6 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
           </form>
         </div>
 
-        {/* ROSTER & SGPA VIEW */}
         <div className="lg:col-span-2 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex flex-col h-[75vh] overflow-hidden">
           <div className="flex justify-between items-center mb-4 border-b border-gray-800 pb-3 shrink-0">
             <h2 className="text-base font-bold text-white flex items-center gap-2">
@@ -188,7 +164,6 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
                 
                 return (
                   <div key={semester} className="space-y-3">
-                    {/* Semester Header with SGPA */}
                     <div className="flex justify-between items-end border-b border-gray-800 pb-2">
                       <h3 className="text-lg font-bold text-emerald-400">{semester}</h3>
                       <div className="text-right">
@@ -199,7 +174,6 @@ const CGPACalculator = ({ cloudCGPA = [], updateCloudData }) => {
                       </div>
                     </div>
                     
-                    {/* Courses in this Semester */}
                     <div className="space-y-2">
                       {semesterCourses.map(course => (
                         <div key={course.id} className="bg-black border border-gray-800 p-4 rounded-xl flex items-center justify-between group hover:border-gray-700 transition-colors">
