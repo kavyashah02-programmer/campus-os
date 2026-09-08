@@ -22,8 +22,7 @@ import FinanceTracker from './FinanceTracker';
 import RewardSystem from './RewardSystem';
 import Library from './Library';
 import AnimalDonation from './AnimalDonation';
-import MotivationalQuotes from './MotivationalQuotes';
-
+import MotivationalQuote from './MotivationalQuote';
 
 const MAX_DEVICES = 2;
 
