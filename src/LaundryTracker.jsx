@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocalStorageSync } from './useLocalStorageSync'; // Ensure this path matches
+import { useLocalStorageSync } from './useLocalStorageSync'; 
 
 const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
   
@@ -16,14 +16,14 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
   ];
 
   // 1. Array sync for laundry items using custom hook
- const [items, setItems] = useLocalStorageSync('laundryItemsData', cloudLaundry.items || []);
+  const [items, setItems] = useLocalStorageSync('laundryItemsData', cloudLaundry.items || []);
 
-  // 👇 CORRECTED BRIDGE 👇
   useEffect(() => {
     if (cloudLaundry && cloudLaundry.items) {
-      setItems(cloudLaundry.items); // Make sure to use setItems here!
+      setItems(cloudLaundry.items); 
     }
-  }, [cloudLaundry]);
+  }, [cloudLaundry, setItems]);
+
   // 2. Manual local storage for totalDue (since it's a number, not an array)
   const [totalDue, setTotalDue] = useState(() => {
     const saved = localStorage.getItem('laundryTotalDueData');
@@ -90,7 +90,9 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
     setNewPrice('');
   };
 
+  // --- CALCULATION ENGINE ---
   const currentBatchTotal = safeItems.reduce((sum, item) => sum + (item.price * item.count), 0);
+  const currentBatchCount = safeItems.reduce((sum, item) => sum + item.count, 0); // NEW: Total clothes calculation
 
   const sendToLaundry = () => {
     if (currentBatchTotal === 0) return;
@@ -105,9 +107,9 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
   };
 
   return (
-    <div className="bg-[#121212] rounded-xl p-6 shadow-lg border border-gray-700 w-full flex flex-col h-[650px]">
+    <div className="bg-[#121212] rounded-xl p-6 shadow-lg border border-gray-700 w-full flex flex-col h-[650px] animate-in fade-in duration-500">
       
-      <div className="flex justify-between items-start mb-6">
+      <div className="flex justify-between items-start mb-6 shrink-0">
         <div>
           <h3 className="text-white font-bold text-xl">Current Wash Batch</h3>
           <p className="text-sm text-gray-300 mt-1">Add items to calculate the cost</p>
@@ -125,7 +127,7 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
 
       <div className="flex-1 overflow-y-auto pr-2 space-y-3 mb-4 custom-scrollbar">
         {safeItems.map((item) => (
-          <div key={item.id} className="flex items-center justify-between bg-[#1a1a1a] p-3 rounded-lg border border-gray-700 group">
+          <div key={item.id} className="flex items-center justify-between bg-[#1a1a1a] p-3 rounded-lg border border-gray-700 group transition-colors hover:border-gray-600">
             <div>
               <p className="text-white text-base font-semibold">{item.name}</p>
               <div className="flex items-center space-x-1 mt-1">
@@ -134,7 +136,7 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
                   type="number" 
                   value={item.price}
                   onChange={(e) => updatePrice(item.id, Number(e.target.value))}
-                  className="bg-transparent border-b border-gray-600 text-sm text-gray-300 w-12 focus:outline-none focus:border-green-500 text-center"
+                  className="bg-transparent border-b border-gray-600 text-sm text-gray-300 w-12 focus:outline-none focus:border-green-500 text-center transition-colors"
                 />
                 <span className="text-sm text-gray-400">/ piece</span>
               </div>
@@ -163,18 +165,24 @@ const LaundryTracker = ({ cloudLaundry = {}, updateCloudData }) => {
         ))}
       </div>
 
-      <form onSubmit={addNewItem} className="flex space-x-3 mb-4 border-t border-gray-700 pt-5">
+      <form onSubmit={addNewItem} className="flex space-x-3 mb-4 border-t border-gray-700 pt-5 shrink-0">
         <input type="text" placeholder="New item..." value={newName} onChange={(e) => setNewName(e.target.value)} className="flex-1 bg-black border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-green-500 transition-colors" />
         <input type="number" placeholder="₹ Price" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} className="w-24 bg-black border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-green-500 transition-colors" />
         <button type="submit" className="bg-gray-700 text-white font-semibold px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">Add</button>
       </form>
 
-      <div className="flex items-center justify-between bg-black p-4 rounded-lg border border-gray-700 mt-auto">
-        <div>
-          <p className="text-sm text-gray-400 font-semibold">Current Batch Cost</p>
-          <p className="text-xl font-bold text-green-400">₹{currentBatchTotal}</p>
+      <div className="flex items-center justify-between bg-black p-4 rounded-lg border border-gray-700 mt-auto shrink-0">
+        <div className="flex gap-8">
+          <div>
+            <p className="text-sm text-gray-400 font-semibold">Total Clothes</p>
+            <p className="text-xl font-bold text-white">{currentBatchCount}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-400 font-semibold">Batch Cost</p>
+            <p className="text-xl font-bold text-green-400">₹{currentBatchTotal}</p>
+          </div>
         </div>
-        <button onClick={sendToLaundry} disabled={currentBatchTotal === 0} className={`px-6 py-2 rounded-lg font-bold transition-all ${currentBatchTotal === 0 ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-green-500 text-black hover:bg-green-400 shadow-[0_0_15px_rgba(34,197,94,0.4)]'}`}>
+        <button onClick={sendToLaundry} disabled={currentBatchTotal === 0} className={`px-6 py-3 rounded-lg font-bold transition-all ${currentBatchTotal === 0 ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-green-500 text-black hover:bg-green-400 shadow-[0_0_15px_rgba(34,197,94,0.4)]'}`}>
           Send to Wash
         </button>
       </div>
