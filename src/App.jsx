@@ -4,7 +4,6 @@ import ReactApexChart from 'react-apexcharts';
 // --- FIREBASE IMPORTS ---
 import { auth, db } from './firebase'; 
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-// UPGRADE: Added onSnapshot for real-time live syncing
 import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore'; 
 
 // --- COMPONENTS ---
@@ -23,6 +22,7 @@ import RewardSystem from './RewardSystem';
 import Library from './Library';
 import AnimalDonation from './AnimalDonation';
 import MotivationalQuote from './MotivationalQuote';
+
 const MAX_DEVICES = 2;
 
 // --- DEVICE VERIFICATION LOGIC ---
@@ -95,7 +95,7 @@ function App() {
   const timerStartRef = useRef(null);
   const [spotifyEmbed, setSpotifyEmbed] = useState('https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?theme=0');
 
-  // --- LOCALSTORAGE PERSISTENT STATES (Habits & Focus Logs) ---
+  // --- LOCALSTORAGE PERSISTENT STATES ---
   const [habits, setHabits] = useState(() => {
     try {
       const saved = localStorage.getItem('habitTracker_habitsData');
@@ -123,7 +123,6 @@ function App() {
     return {};
   });
 
-  // Automatically save to LocalStorage whenever state changes
   useEffect(() => localStorage.setItem('habitTracker_habitsData', JSON.stringify(habits)), [habits]);
   useEffect(() => localStorage.setItem('habitTracker_logsData', JSON.stringify(habitLogs)), [habitLogs]);
   useEffect(() => localStorage.setItem('focusTracker_logsData', JSON.stringify(focusLogs)), [focusLogs]);
@@ -140,21 +139,89 @@ function App() {
   }, []);
 
   // --------------------------------------------------------
-  // 2. MASTER CLOUD SYNC LOGIC (UPGRADED TO REAL-TIME)
+  // 2. MASTER CLOUD SYNC & DATA RETENTION ENGINE
   // --------------------------------------------------------
   useEffect(() => {
     if (user) {
       setIsDataLoading(true);
       const userRef = doc(db, 'users', user.uid);
       
-      // REAL-TIME LISTENER: Constantly watches for cross-device updates!
-      const unsubscribe = onSnapshot(userRef, (snap) => {
+      // --- THE AUTO-CLEANUP ENGINE (Runs once daily to delete 6-month-old data) ---
+      const runDataRetentionCleanup = async (data) => {
+        const today = new Date().toISOString().split('T')[0];
+        const lastCleanup = localStorage.getItem('campusos_last_cleanup');
+        
+        if (lastCleanup === today) return data;
+
+        let hasDeletions = false;
+        const cleaned = { ...data };
+        
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const thresholdTime = sixMonthsAgo.getTime();
+        const thresholdDateStr = sixMonthsAgo.toISOString().split('T')[0];
+
+        if (cleaned.tasks) {
+          const len = cleaned.tasks.length;
+          cleaned.tasks = cleaned.tasks.filter(t => (t.repeat && t.repeat !== 'none') || new Date(t.deadline || t.date).getTime() >= thresholdTime);
+          if (cleaned.tasks.length !== len) hasDeletions = true;
+        }
+
+        if (cleaned.planner) {
+          const len = cleaned.planner.length;
+          cleaned.planner = cleaned.planner.filter(b => (b.repeat && b.repeat !== 'Once') || new Date(b.date).getTime() >= thresholdTime);
+          if (cleaned.planner.length !== len) hasDeletions = true;
+        }
+
+        if (cleaned.exams) {
+          const len = cleaned.exams.length;
+          cleaned.exams = cleaned.exams.filter(e => new Date(e.date).getTime() >= thresholdTime);
+          if (cleaned.exams.length !== len) hasDeletions = true;
+        }
+
+        if (cleaned.finance && cleaned.finance.transactions) {
+          const len = cleaned.finance.transactions.length;
+          const keptTx = cleaned.finance.transactions.filter(t => new Date(t.date).getTime() >= thresholdTime);
+          if (keptTx.length !== len) {
+            cleaned.finance = { ...cleaned.finance, transactions: keptTx };
+            hasDeletions = true;
+          }
+        }
+
+        const cleanLogs = (logsObj) => {
+          if (!logsObj) return { newLogs: logsObj, changed: false };
+          let changed = false;
+          const newLogs = {};
+          for (const [dateStr, val] of Object.entries(logsObj)) {
+            if (dateStr >= thresholdDateStr) newLogs[dateStr] = val;
+            else changed = true;
+          }
+          return { newLogs, changed };
+        };
+
+        const habitClean = cleanLogs(cleaned.habitLogs);
+        if (habitClean.changed) { cleaned.habitLogs = habitClean.newLogs; hasDeletions = true; }
+
+        const focusClean = cleanLogs(cleaned.focusLogs);
+        if (focusClean.changed) { cleaned.focusLogs = focusClean.newLogs; hasDeletions = true; }
+
+        if (hasDeletions) {
+          console.log("Retention Engine: Cleared out data older than 6 months.");
+          await updateDoc(userRef, cleaned);
+        }
+
+        localStorage.setItem('campusos_last_cleanup', today);
+        return cleaned;
+      };
+
+      const unsubscribe = onSnapshot(userRef, async (snap) => {
         if (snap.exists()) {
-          const data = snap.data();
+          let data = snap.data();
+          
+          data = await runDataRetentionCleanup(data);
+          
           setCloudData(data); 
           
-          // SMART UPDATE: Only update local screen if the cloud has different data
-          // This prevents infinite save-loops between devices
           if (data.habitLogs) {
              setHabitLogs(prev => JSON.stringify(prev) !== JSON.stringify(data.habitLogs) ? data.habitLogs : prev);
           }
@@ -171,23 +238,17 @@ function App() {
         setIsDataLoading(false);
       });
 
-      // Close the live connection when user logs out to save memory
       return () => unsubscribe();
     }
   }, [user]);
 
   const updateCloudData = async (databaseKey, newData) => {
     if (!user) return;
-    
-    // 1. INSTANT UPDATE: Change the UI immediately so it feels lightning fast
     setCloudData(prev => ({ ...prev, [databaseKey]: newData }));
-    
-    // 2. CLOUD SYNC: Save to Firebase in the background
     const userRef = doc(db, 'users', user.uid);
     await setDoc(userRef, { [databaseKey]: newData }, { merge: true });
   };
 
-  // Auto-sync dashboard states to cloud when changed locally (Guarded to prevent infinite loops)
   useEffect(() => {
     if (user && !isDataLoading && Object.keys(habitLogs).length > 0) {
       if (JSON.stringify(habitLogs) !== JSON.stringify(cloudData.habitLogs)) updateCloudData('habitLogs', habitLogs);
@@ -211,7 +272,6 @@ function App() {
       if (spotifyEmbed !== cloudData.spotifyEmbed) updateCloudData('spotifyEmbed', spotifyEmbed);
     }
   }, [spotifyEmbed, user, isDataLoading, cloudData.spotifyEmbed]);
-
 
   // --------------------------------------------------------
   // 3. DEVICE SETTINGS FETCHER
@@ -261,7 +321,6 @@ function App() {
   
   const overviewCategories = last7Days.map(dStr => new Date(dStr).toLocaleDateString('en-US', {weekday: 'short'}));
 
-  // Math for Productivity Graph
   const overviewSeriesData = last7Days.map(dStr => {
     const logs = habitLogs[dStr] || {};
     const c = Object.values(logs).filter(Boolean).length;
@@ -271,10 +330,9 @@ function App() {
   const overviewOptions = { chart: { type: 'area', toolbar: { show: false }, background: 'transparent' }, colors: ['#10b981'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 90, 100] } }, dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 2 }, xaxis: { categories: overviewCategories, axisBorder: { show: false }, axisTicks: { show: false }, labels: { style: { colors: '#6b7280' } } }, yaxis: { show: false, min: 0, max: 100 }, grid: { show: false }, theme: { mode: 'dark' } };
   const overviewSeries = [{ name: 'Completion %', data: overviewSeriesData }];
 
-  // Math for Daily Focus Graph
   const focusSeriesData = last7Days.map(dStr => {
     const secs = focusLogs[dStr] || 0;
-    return Math.round(secs / 60); // Convert seconds to minutes for the chart
+    return Math.round(secs / 60); 
   });
 
   const focusOptions = { 
@@ -293,8 +351,6 @@ function App() {
   // --------------------------------------------------------
   // 5. TIMERS, LOGS, & NOTIFICATIONS
   // --------------------------------------------------------
-
-  // Save the current un-saved session to the graph
   const saveSessionToLogs = (timeToSaveInSeconds) => {
     if (timeToSaveInSeconds <= 0) return;
     setFocusLogs(prev => {
@@ -328,17 +384,13 @@ function App() {
     return () => { clearInterval(clockInterval); clearInterval(taskInterval); };
   }, [user, cloudData.tasks]);
 
-  // Main Timer Engine
-// Main Timer Engine (Bulletproof System Clock Version)
   useEffect(() => {
     let timerInterval = null;
     
     if (isStudying) {
-      // Record the exact real-world start time (accounting for any previously elapsed time)
       timerStartRef.current = Date.now() - (studyTime * 1000);
       
       timerInterval = setInterval(() => {
-        // Calculate exact elapsed time using the system clock instead of just adding +1
         const exactSeconds = Math.floor((Date.now() - timerStartRef.current) / 1000);
         setStudyTime(exactSeconds);
       }, 1000);
@@ -348,7 +400,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStudying]);
 
-  // Auto-Save when Timer reaches Target
   useEffect(() => {
     if (isStudying && focusMode === 'timer' && studyTime >= timerTarget * 60) {
       setIsStudying(false);
@@ -420,7 +471,6 @@ function App() {
     }
   };
 
-  // Timer Button Actions
   const toggleStudyTimer = () => setIsStudying(!isStudying);
   
   const handleResetTimer = () => {
@@ -471,7 +521,6 @@ function App() {
   // RENDER BLOCKS
   // --------------------------------------------------------
   
-  // Guard 1: The Loading Gate
   if (isCheckingAuth || (user && isDataLoading)) {
     return (
       <div className="flex h-screen bg-black items-center justify-center font-sans flex-col">
@@ -546,19 +595,18 @@ function App() {
               </div>
             </header>
 
-            {/* --- UPDATED GRAPH ROW --- */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="col-span-1 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+              <div className="col-span-1 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg w-full">
                  <h3 className="text-emerald-400 font-semibold text-sm uppercase tracking-wider mb-2">Weekly Productivity</h3>
                  <ReactApexChart options={overviewOptions} series={overviewSeries} type="area" height={160} />
               </div>
 
-              <div className="col-span-1 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg">
+              <div className="col-span-1 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg w-full">
                  <h3 className="text-blue-400 font-semibold text-sm uppercase tracking-wider mb-2">Daily Focus (Mins)</h3>
                  <ReactApexChart options={focusOptions} series={focusSeries} type="bar" height={160} />
               </div>
 
-              <div className="col-span-1 flex flex-col gap-6">
+              <div className="col-span-1 flex flex-col gap-6 w-full">
                 <div className={`rounded-xl p-6 border shadow-lg flex flex-col justify-center items-center text-center transition-colors duration-500 ${progressPercentage > 75 ? 'bg-emerald-900/20 border-emerald-900/50' : 'bg-[#121212] border-gray-800'}`}>
                    <h3 className={`${progressPercentage > 75 ? 'text-emerald-500' : 'text-gray-500'} font-semibold text-sm uppercase tracking-wider mb-2`}>Current Streak</h3>
                    <p className="text-5xl font-bold text-white flex items-center gap-2">{progressPercentage > 75 ? '🔥' : '🧊'} {currentStreak}<span className={`text-lg font-normal mt-3 ${progressPercentage > 75 ? 'text-emerald-400' : 'text-gray-600'}`}>days</span></p>
@@ -589,7 +637,6 @@ function App() {
 
                  <div className="text-6xl font-black text-white font-mono mb-6 z-10 drop-shadow-md">{formatTimer(displaySeconds)}</div>
                  
-                 {/* --- UPDATED TIMER BUTTONS --- */}
                  <div className="flex gap-3 w-full px-4 z-10">
                    <button onClick={toggleStudyTimer} className={`flex-1 py-3 rounded-xl font-bold text-white transition-colors shadow-lg ${isStudying ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'}`}>{isStudying ? 'Pause' : 'Start'}</button>
                    
@@ -704,6 +751,20 @@ function App() {
                   </div>
                 )}
               </div>
+
+              {/* DATA RETENTION NOTICE */}
+              <div className="mt-8 pt-6 border-t border-gray-800">
+                <div className="flex items-start gap-3 bg-blue-900/10 border border-blue-900/30 p-4 rounded-xl">
+                  <svg className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  <div>
+                    <p className="text-sm font-bold text-blue-400 mb-1">Data Retention Policy</p>
+                    <p className="text-xs text-gray-400 leading-relaxed">
+                      To keep CampusOS lightning fast, completed tasks, old exams, and daily logs are automatically archived and deleted <strong>6 months</strong> after they pass. (Repeating habits and schedules are saved forever).
+                    </p>
+                  </div>
+                </div>
+              </div>
+
             </div>
             
           </div>
