@@ -15,6 +15,7 @@ const Sidebar = ({ currentView, setCurrentView }) => {
     { id: 'library', icon: '📚', label: 'Digital Library', color: 'text-blue-400' },
     { id: 'laundry', icon: '🧺', label: 'Laundry Centre', color: 'text-cyan-500' },
     { id: 'rewards', icon: '🎁', label: 'Rewards', color: 'text-orange-500' },
+    { id: 'bucketlist', icon: '🪣', label: 'Bucket List', color: 'text-pink-500' },
     { id: 'donate', icon: '❤️', label: 'Animal Donation', color: 'text-rose-500' }
   ];
 
