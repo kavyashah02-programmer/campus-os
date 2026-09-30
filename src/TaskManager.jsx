@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useLocalStorageSync } from './useLocalStorageSync'; 
 
+const getLocalDate = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   const [tasks, setTasks] = useLocalStorageSync('taskManagerTasks', cloudTasks);
 
@@ -14,7 +19,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
 
   const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getLocalDate());
   const [time, setTime] = useState('');
   const [deadline, setDeadline] = useState('');
   const [deadlineTime, setDeadlineTime] = useState(''); 
@@ -27,7 +32,18 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   const [image, setImage] = useState(null);
 
   const [calendarDate, setCalendarDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getLocalDate()); 
+  const [realTodayStr, setRealTodayStr] = useState(getLocalDate()); 
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const currentDate = getLocalDate();
+      if (currentDate !== realTodayStr) {
+        setRealTodayStr(currentDate);
+      }
+    }, 60000); 
+    return () => clearInterval(interval);
+  }, [realTodayStr]);
 
   const generateId = () => Date.now().toString() + Math.random().toString(36).slice(2, 9);
 
@@ -59,7 +75,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
         updatedTasks[taskIndex] = {
           ...t,
           title, date, time, deadline, deadlineTime, desc, place, thingsToBring, repeat, category, color, image,
-          excludedDates: repeatChanged ? [] : (t.excludedDates || [])
+          excludedDates: repeatChanged ? [] : (t.excludedDates ? t.excludedDates : [])
         };
       }
       setEditingId(null);
@@ -85,18 +101,18 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     if (!t) return;
     
     setEditingId(t.id);
-    setTitle(t.title || ''); 
-    setDate(t.date || new Date().toISOString().split('T')[0]); 
-    setTime(t.time || ''); 
-    setDeadline(t.deadline || ''); 
-    setDeadlineTime(t.deadlineTime || ''); 
-    setDesc(t.desc || ''); 
-    setPlace(t.place || ''); 
-    setThingsToBring(t.thingsToBring || ''); 
-    setRepeat(t.repeat || 'none'); 
-    setCategory(t.category || 'Academic');
-    setColor(t.color || '#3b82f6'); 
-    setImage(t.image || null);
+    setTitle(t.title ? t.title : ''); 
+    setDate(t.date ? t.date : getLocalDate()); 
+    setTime(t.time ? t.time : ''); 
+    setDeadline(t.deadline ? t.deadline : ''); 
+    setDeadlineTime(t.deadlineTime ? t.deadlineTime : ''); 
+    setDesc(t.desc ? t.desc : ''); 
+    setPlace(t.place ? t.place : ''); 
+    setThingsToBring(t.thingsToBring ? t.thingsToBring : ''); 
+    setRepeat(t.repeat ? t.repeat : 'none'); 
+    setCategory(t.category ? t.category : 'Academic');
+    setColor(t.color ? t.color : '#3b82f6'); 
+    setImage(t.image ? t.image : null);
     
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -104,7 +120,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   const toggleTask = (id, targetDate) => {
     const updatedTasks = safeTasks.map(t => {
       if (t.id === id) {
-        const completed = t.completedDates || [];
+        const completed = t.completedDates ? t.completedDates : [];
         const newCompleted = completed.includes(targetDate)
           ? completed.filter(d => d !== targetDate)
           : [...completed, targetDate];
@@ -129,7 +145,8 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
       } else {
         updatedTasks = safeTasks.map(x => {
           if (x.id === id) {
-            return { ...x, excludedDates: [...(x.excludedDates || []), targetDate] };
+            const exDates = x.excludedDates ? x.excludedDates : [];
+            return { ...x, excludedDates: [...exDates, targetDate] };
           }
           return x;
         });
@@ -177,8 +194,8 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   };
 
   const getTaskDeadlineTimestamp = (task) => {
-    const targetDate = task.deadline || task.date;
-    const targetTime = task.deadlineTime || task.time || '23:59';
+    const targetDate = task.deadline ? task.deadline : task.date;
+    const targetTime = task.deadlineTime ? task.deadlineTime : (task.time ? task.time : '23:59');
     return new Date(`${targetDate}T${targetTime}`).getTime();
   };
 
@@ -188,15 +205,17 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
       const timeA = getTaskDeadlineTimestamp(a);
       const timeB = getTaskDeadlineTimestamp(b);
       if (timeA !== timeB) return timeA - timeB;
-      return (a.createdAt || 0) - (b.createdAt || 0);
+      const createdA = a.createdAt ? a.createdAt : 0;
+      const createdB = b.createdAt ? b.createdAt : 0;
+      return createdA - createdB;
     });
   
   const now = new Date();
   const missedTasks = safeTasks.filter(task => {
     if (task.repeat && task.repeat !== 'none') return false; 
 
-    const targetDate = task.deadline || task.date;
-    const targetTime = task.deadline ? (task.deadlineTime || '23:59') : (task.time || '23:59');
+    const targetDate = task.deadline ? task.deadline : task.date;
+    const targetTime = task.deadline ? (task.deadlineTime ? task.deadlineTime : '23:59') : (task.time ? task.time : '23:59');
     
     const isDone = task.deadline 
       ? (task.completedDates && task.completedDates.some(d => d >= task.date && d <= task.deadline))
@@ -243,9 +262,10 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
         } else {
           const idx = updatedTasks.findIndex(x => x.id === pt.id);
           if (idx > -1) {
+            const exDates = updatedTasks[idx].excludedDates ? updatedTasks[idx].excludedDates : [];
             updatedTasks[idx] = { 
               ...updatedTasks[idx], 
-              excludedDates: [...(updatedTasks[idx].excludedDates || []), selectedDate] 
+              excludedDates: [...exDates, selectedDate] 
             };
           }
           
@@ -275,12 +295,21 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   const month = calendarDate.getMonth();
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDay(year, month);
-  const realTodayStr = new Date().toISOString().split('T')[0];
 
   const renderTaskCard = (task, renderContextDate) => {
     const isDone = task.deadline 
       ? (task.completedDates && task.completedDates.some(d => d >= task.date && d <= task.deadline))
       : (task.completedDates ? task.completedDates.includes(renderContextDate) : task.completed);
+
+    const hasDeadlineInfo = Boolean(task.deadline || task.deadlineTime);
+    const deadlineDateCalc = task.deadline ? task.deadline : task.date;
+    const deadlineTimeCalc = task.deadlineTime ? task.deadlineTime : (task.time ? task.time : '23:59');
+    const isOverdue = now > new Date(`${deadlineDateCalc}T${deadlineTimeCalc}`) && !isDone;
+    
+    const deadlineArr = [];
+    if (task.deadline) deadlineArr.push(task.deadline);
+    if (task.deadlineTime) deadlineArr.push(task.deadlineTime);
+    const deadlineStr = deadlineArr.join(' at ');
 
     return (
       <div 
@@ -293,7 +322,6 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
             <input 
               type="checkbox" 
               checked={isDone} 
-              // FIX: Now passes the exact rendered date instead of creation date
               onChange={() => toggleTask(task.id, renderContextDate)} 
               className="mt-1 w-5 h-5 accent-indigo-500 cursor-pointer shrink-0" 
             />
@@ -303,9 +331,9 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
               </h4>
               
               <div className="flex flex-wrap gap-2 mt-2">
-                {Boolean(task.deadline || task.deadlineTime) && (
-                  <span className={`text-[10px] px-2 py-1 rounded shadow-sm font-bold flex items-center gap-1 ${now > new Date(`${task.deadline || task.date}T${task.deadlineTime || '23:59'}`) && !isDone ? 'text-red-400 bg-red-900/20 border border-red-900/50' : 'text-orange-400 bg-orange-900/20 border border-orange-900/50'}`}>
-                    ⚠️ Due: {[task.deadline, task.deadlineTime].filter(Boolean).join(' at ')}
+                {hasDeadlineInfo && (
+                  <span className={`text-[10px] px-2 py-1 rounded shadow-sm font-bold flex items-center gap-1 ${isOverdue ? 'text-red-400 bg-red-900/20 border border-red-900/50' : 'text-orange-400 bg-orange-900/20 border border-orange-900/50'}`}>
+                    ⚠️ Due: {deadlineStr}
                   </span>
                 )}
                 
@@ -459,7 +487,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
                 Missed / Overdue Tasks
               </h2>
               <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
-                {missedTasks.map(task => renderTaskCard(task, task.deadline || task.date))}
+                {missedTasks.map(task => renderTaskCard(task, task.deadline ? task.deadline : task.date))}
               </div>
             </div>
           )}
@@ -468,7 +496,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-gray-800 pb-4 gap-4">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg> 
                 Action Items
               </h2>
@@ -479,7 +507,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
                   title="Move all unfinished tasks to tomorrow"
                   className="bg-indigo-900/30 hover:bg-indigo-900/50 text-indigo-400 border border-indigo-500/30 text-xs font-bold px-3 py-2 rounded-xl transition-colors flex items-center gap-1 shadow-sm"
                 >
-                  Carry Forward ➡️
+                  Carry Forward ➡️️
                 </button>
                 <div className="flex items-center gap-2 bg-black border border-gray-800 rounded-xl px-3 py-1">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Date</label>
@@ -550,8 +578,12 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
                            ? (t.completedDates && t.completedDates.some(d => d >= t.date && d <= t.deadline))
                            : (t.completedDates ? t.completedDates.includes(dayStr) : t.completed);
                            
-                         const deadlineText = (t.deadline || t.deadlineTime) ? `Due: {[t.deadline, t.deadlineTime].filter(Boolean).join(' at ')}\n` : '';
+                         const arr = [];
+                         if (t.deadline) arr.push(t.deadline);
+                         if (t.deadlineTime) arr.push(t.deadlineTime);
+                         const deadlineText = arr.length > 0 ? `Due: ${arr.join(' at ')}\n` : '';
                          const tooltip = `${t.title}\n${deadlineText}Left-click: Delete\nRight-click: Edit`;
+
                          return (
                           <div 
                             key={t.id} 
