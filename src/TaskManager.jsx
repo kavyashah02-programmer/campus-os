@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocalStorageSync } from './useLocalStorageSync'; // Custom hook imported from src/
+import { useLocalStorageSync } from './useLocalStorageSync'; 
 
 const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
   const [tasks, setTasks] = useLocalStorageSync('taskManagerTasks', cloudTasks);
@@ -176,7 +176,6 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     return false;
   };
 
-  // --- NEW: Universal Timestamp Calculator for Sorting ---
   const getTaskDeadlineTimestamp = (task) => {
     const targetDate = task.deadline || task.date;
     const targetTime = task.deadlineTime || task.time || '23:59';
@@ -188,11 +187,7 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     .sort((a, b) => {
       const timeA = getTaskDeadlineTimestamp(a);
       const timeB = getTaskDeadlineTimestamp(b);
-      
-      // Sort by the soonest deadline absolute time first
       if (timeA !== timeB) return timeA - timeB;
-      
-      // Fallback to creation order if times are identical
       return (a.createdAt || 0) - (b.createdAt || 0);
     });
   
@@ -212,7 +207,6 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
     const taskEndObj = new Date(`${targetDate}T${targetTime}`);
     return now > taskEndObj;
   }).sort((a, b) => {
-    // Also use the precise timestamp sorter for Missed Tasks
     return getTaskDeadlineTimestamp(a) - getTaskDeadlineTimestamp(b);
   });
 
@@ -299,7 +293,8 @@ const TaskManager = ({ cloudTasks = [], updateCloudData }) => {
             <input 
               type="checkbox" 
               checked={isDone} 
-              onChange={() => toggleTask(task.id, task.deadline || task.date)} 
+              // FIX: Now passes the exact rendered date instead of creation date
+              onChange={() => toggleTask(task.id, renderContextDate)} 
               className="mt-1 w-5 h-5 accent-indigo-500 cursor-pointer shrink-0" 
             />
             <div className="flex-1">

@@ -35,13 +35,10 @@ const ExamTracker = ({ cloudExams = [], cloudPlanner = [], cloudSubjects = [], u
     return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
   };
 
-  // --- AUTO-ARCHIVE & UPCOMING EXAM SORTER ---
-  // Filters out exams that have already passed, and sorts the remaining by closest date
   const sortedExams = [...safeExams]
     .filter(exam => calculateDaysLeft(exam.date) >= 0)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  // Automatically selects the next upcoming exam if none is selected, or if the selected one just passed!
   useEffect(() => {
     if (!selectedExamId && sortedExams.length > 0) setSelectedExamId(sortedExams[0].id);
     else if (selectedExamId && !sortedExams.find(e => e.id === selectedExamId)) {
@@ -214,8 +211,6 @@ const ExamTracker = ({ cloudExams = [], cloudPlanner = [], cloudSubjects = [], u
 
   const currentExam = safeExams.find(e => e.id === selectedExamId);
 
-  // --- UNIT SEQUENCING LOGIC ---
-  // Sorts topics semantically (e.g. 2.1 -> 2.2 -> 2.10) and pushes unit-less topics to the bottom
   const sortedTopics = currentExam ? [...currentExam.topics].sort((a, b) => {
     const uA = a.unit || '';
     const uB = b.unit || '';
@@ -223,6 +218,16 @@ const ExamTracker = ({ cloudExams = [], cloudPlanner = [], cloudSubjects = [], u
     if (uA && !uB) return -1;
     return uA.localeCompare(uB, undefined, { numeric: true, sensitivity: 'base' });
   }) : [];
+
+  // --- PACING ENGINE CALCULATIONS ---
+  const currentDaysLeft = currentExam ? calculateDaysLeft(currentExam.date) : 0;
+  const validPacingDays = Math.max(1, currentDaysLeft); 
+  
+  const leftStudy = sortedTopics.filter(t => !t.studied).length;
+  const paceStudy = Math.ceil(leftStudy / validPacingDays);
+  
+  const leftRev = sortedTopics.filter(t => !t.revised).length;
+  const paceRev = Math.ceil(leftRev / validPacingDays);
 
   const phaseColors = [
     { text: 'text-sky-400', bg: 'bg-sky-900/10', border: 'border-sky-900/50', accent: 'accent-sky-500' },
@@ -241,7 +246,6 @@ const ExamTracker = ({ cloudExams = [], cloudPlanner = [], cloudSubjects = [], u
         </div>
       </header>
 
-      {/* TOP SECTION: ACTIVE EXAM & SYLLABUS PHASES */}
       <div className="bg-[#121212] rounded-2xl border border-gray-800 shadow-lg flex flex-col min-h-[45vh] overflow-hidden shrink-0">
         {!currentExam ? (
           <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-10 text-center">
@@ -275,8 +279,8 @@ const ExamTracker = ({ cloudExams = [], cloudPlanner = [], cloudSubjects = [], u
                 
                 <div className="text-right shrink-0 ml-4">
                   <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">Time Remaining</p>
-                  <p className={`text-3xl font-black ${calculateDaysLeft(currentExam.date) <= 3 ? 'text-red-500' : 'text-purple-500'}`}>
-                    {Math.max(0, calculateDaysLeft(currentExam.date))} <span className="text-lg font-medium text-gray-500">Days</span>
+                  <p className={`text-3xl font-black ${currentDaysLeft <= 3 ? 'text-red-500' : 'text-purple-500'}`}>
+                    {Math.max(0, currentDaysLeft)} <span className="text-lg font-medium text-gray-500">Days</span>
                   </p>
                 </div>
               </div>
@@ -291,7 +295,13 @@ const ExamTracker = ({ cloudExams = [], cloudPlanner = [], cloudSubjects = [], u
             <div className="flex overflow-x-auto custom-scrollbar flex-1 min-h-[300px]">
               
               <div className="flex flex-col h-full border-r border-gray-800 min-w-[320px] flex-1 shrink-0">
-                <div className="p-4 bg-gray-900/20 border-b border-gray-800 shadow-inner"><h3 className="font-bold text-blue-400 uppercase tracking-wider text-xs">Self-Study Phase</h3></div>
+                <div className="p-4 bg-gray-900/20 border-b border-gray-800 shadow-inner flex justify-between items-center">
+                  <h3 className="font-bold text-blue-400 uppercase tracking-wider text-xs">Self-Study Phase</h3>
+                  <div className="text-right flex flex-col items-end">
+                    <span className="text-[10px] text-gray-400 font-bold">{leftStudy} Left</span>
+                    {leftStudy > 0 && currentDaysLeft >= 0 && <span className="text-[9px] text-blue-400 font-bold mt-0.5 bg-blue-900/30 px-1.5 py-0.5 rounded">{paceStudy} / day target</span>}
+                  </div>
+                </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
                   {sortedTopics.map(topic => (
                     <div key={topic.id} className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${topic.studied ? 'bg-black/50 border-gray-800 opacity-60' : 'bg-black border-gray-700 shadow-sm'}`}>
@@ -310,7 +320,13 @@ const ExamTracker = ({ cloudExams = [], cloudPlanner = [], cloudSubjects = [], u
               </div>
 
               <div className="flex flex-col h-full border-r border-gray-800 min-w-[320px] flex-1 shrink-0">
-                <div className="p-4 bg-purple-900/10 border-b border-gray-800 shadow-inner"><h3 className="font-bold text-purple-400 uppercase tracking-wider text-xs">Revision Phase</h3></div>
+                <div className="p-4 bg-purple-900/10 border-b border-gray-800 shadow-inner flex justify-between items-center">
+                  <h3 className="font-bold text-purple-400 uppercase tracking-wider text-xs">Revision Phase</h3>
+                  <div className="text-right flex flex-col items-end">
+                    <span className="text-[10px] text-gray-400 font-bold">{leftRev} Left</span>
+                    {leftRev > 0 && currentDaysLeft >= 0 && <span className="text-[9px] text-purple-400 font-bold mt-0.5 bg-purple-900/30 px-1.5 py-0.5 rounded">{paceRev} / day target</span>}
+                  </div>
+                </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
                   {sortedTopics.map(topic => (
                     <div key={`rev-${topic.id}`} className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${topic.revised ? 'bg-purple-900/20 border-purple-900/50 shadow-sm' : 'bg-black border-gray-700'}`}>
@@ -326,22 +342,28 @@ const ExamTracker = ({ cloudExams = [], cloudPlanner = [], cloudSubjects = [], u
                       </label>
                     </div>
                   ))}
-                  {sortedTopics.length === 0 && <p className="text-gray-500 text-sm italic text-center mt-10">No topics added yet.</p>}
                 </div>
               </div>
 
               {currentExam.customPhases && currentExam.customPhases.map((phase, index) => {
                 const style = phaseColors[index % phaseColors.length];
+                const leftCustom = sortedTopics.filter(t => !t.customProgress?.[phase]).length;
+                const paceCustom = Math.ceil(leftCustom / validPacingDays);
+
                 return (
                   <div key={phase} className="flex flex-col h-full border-r border-gray-800 min-w-[320px] flex-1 shrink-0">
-                    <div className={`p-4 border-b border-gray-800 shadow-inner ${style.bg}`}>
+                    <div className={`p-4 border-b border-gray-800 shadow-inner flex justify-between items-center ${style.bg}`}>
                       <h3 className={`font-bold uppercase tracking-wider text-xs ${style.text}`}>{phase}</h3>
+                      <div className="text-right flex flex-col items-end">
+                        <span className={`text-[10px] ${style.text} opacity-70 font-bold`}>{leftCustom} Left</span>
+                        {leftCustom > 0 && currentDaysLeft >= 0 && <span className={`text-[9px] ${style.text} font-bold mt-0.5 bg-black/30 px-1.5 py-0.5 rounded`}>{paceCustom} / day target</span>}
+                      </div>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
                       {sortedTopics.map(topic => {
                         const isDone = topic.customProgress?.[phase];
                         return (
-                          <div key={`custom-${topic.id}-${phase}`} className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${isDone ? `${style.bg} ${style.border} opacity-70` : 'bg-black border-gray-700 shadow-sm'}`}>
+                          <div key={`custom-${topic.id}-${phase}`} className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${isDone ? `${style.bg}${style.border} opacity-70` : 'bg-black border-gray-700 shadow-sm'}`}>
                             <label className="flex items-center gap-3 cursor-pointer flex-1">
                               <input type="checkbox" checked={!!isDone} onChange={() => toggleTopicState(currentExam.id, topic.id, phase, true)} className={`w-5 h-5 rounded cursor-pointer ${style.accent}`} />
                               <span className={`text-sm font-semibold select-none ${isDone ? `line-through ${style.text}` : 'text-gray-200'}`}>
@@ -362,7 +384,6 @@ const ExamTracker = ({ cloudExams = [], cloudPlanner = [], cloudSubjects = [], u
         )}
       </div>
 
-      {/* BOTTOM SECTION: EXAM ROSTER TABLE & SETUP FORM */}
       <div className="bg-[#121212] rounded-2xl border border-gray-800 shadow-lg p-6">
         <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
           <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
