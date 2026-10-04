@@ -3,7 +3,6 @@ import { useLocalStorageSync } from './useLocalStorageSync';
 
 const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => {
   
-  // --- THE ULTIMATE SOURCE OF TRUTH ---
   const defaultCategories = [
     {
       id: 'wakeup', name: 'Rise Master', icon: '🌅', desc: 'Wake up at 5:30 AM',
@@ -112,7 +111,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
     customCategories: Array.isArray(data?.customCategories) ? data.customCategories : []
   };
 
-  // Merge default categories (with overrides) + Custom user-created categories
   const activeCategories = [
     ...defaultCategories.map(cat => {
       const override = safeData.userOverrides[cat.id];
@@ -132,7 +130,10 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
     ...safeData.customCategories
   ];
 
-  // --- Core Engine Functions ---
+  // FIX: Inject the new drafting category directly into the render array so the map loop can find it
+  const displayCategories = (isCreatingNew && editingCategory) 
+    ? [editingCategory, ...activeCategories] 
+    : activeCategories;
 
   const handleLog = (groupId) => {
     lastWrite.current = Date.now(); 
@@ -224,7 +225,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
     lastWrite.current = Date.now(); 
 
     if (isCreatingNew) {
-      // Create entirely new category
       setData(prev => {
         const newData = { 
           ...prev, 
@@ -236,7 +236,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
         return newData;
       });
     } else if (editingCategory.id.startsWith('custom_')) {
-      // Update an existing custom category
       setData(prev => {
         const newCustom = prev.customCategories.map(c => c.id === editingCategory.id ? editingCategory : c);
         const newData = { ...prev, customCategories: newCustom };
@@ -244,7 +243,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
         return newData;
       });
     } else {
-      // Override a default category
       setData(prev => {
         const categoryOverride = {
           name: editingCategory.name,
@@ -285,7 +283,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
     });
   };
 
-  // --- UI TRIGGERS ---
   const startNewCategory = () => {
     setIsCreatingNew(true);
     const newId = `custom_${Date.now()}`;
@@ -329,14 +326,14 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
       <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-10">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           
-          {activeCategories.map((cat) => {
+          {/* FIX: Mapped over displayCategories instead of activeCategories */}
+          {displayCategories.map((cat) => {
             const currentProgress = safeData.progress[cat.id] || 0;
             const availableCheats = safeData.cheats[cat.id] || 0;
             const activeTier = cat.tiers.find(t => !safeData.claimed.includes(t.id)) || cat.tiers[cat.tiers.length - 1];
             const pct = Math.min(100, (currentProgress / activeTier.target) * 100);
             const isCustomUserTrack = cat.id.startsWith('custom_');
 
-            // --- EDIT MODE RENDER ---
             if (editingCategory && editingCategory.id === cat.id) {
               return (
                 <div key={cat.id} className="bg-[#1a1a1a] rounded-2xl border-2 border-blue-500/50 p-6 shadow-[0_0_15px_rgba(59,130,246,0.1)] flex flex-col h-full animate-in fade-in">
@@ -376,7 +373,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
                         <div key={t.id} className="flex items-center gap-2">
                           <span className={`text-[10px] font-bold w-14 shrink-0 ${getLevelColor(t.level)} p-1 rounded text-center`}>{t.level}</span>
                           
-                          {/* If creating new, let them edit the target days too */}
                           {isCreatingNew && (
                             <input type="number" min="1" max="365" value={t.target} onChange={(e) => {
                               const newTiers = [...editingCategory.tiers];
@@ -410,11 +406,8 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
               );
             }
 
-            // --- NORMAL MODE RENDER ---
             return (
               <div key={cat.id} className={`bg-[#121212] rounded-2xl border p-6 shadow-lg flex flex-col h-full group relative transition-colors ${isCustomUserTrack ? 'border-indigo-900/50' : 'border-gray-800'}`}>
-                
-                {/* Header */}
                 <div className="flex justify-between items-start mb-6">
                   <div className="flex gap-4 pr-2">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl border shadow-inner shrink-0 ${isCustomUserTrack ? 'border-indigo-500/30 bg-indigo-900/10' : 'border-gray-700 bg-black'}`}>
@@ -429,7 +422,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
                     </div>
                   </div>
                   
-                  {/* Right Side Controls */}
                   <div className="flex items-center gap-3 shrink-0">
                     <button 
                       onClick={() => setEditingCategory(cat)} 
@@ -457,7 +449,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
                   </div>
                 </div>
 
-                {/* Tiers List */}
                 <div className="flex-1 space-y-3 mb-6">
                   {cat.tiers.map((tier, index) => {
                     const isClaimed = safeData.claimed.includes(tier.id);
@@ -489,7 +480,6 @@ const RewardSystem = ({ cloudRewards = null, updateCloudData, habits = [] }) => 
                   })}
                 </div>
 
-                {/* Progress Bar & Buttons */}
                 <div className="mt-auto border-t border-gray-800 pt-5 flex items-center gap-6">
                   <div className="flex-1">
                     <div className="flex justify-between text-xs font-bold mb-2">
