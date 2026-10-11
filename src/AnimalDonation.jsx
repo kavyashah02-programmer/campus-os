@@ -99,7 +99,7 @@ const AnimalDonation = () => {
               <p className="text-sm">
                 For suggestions, feedback, or reviews, please contact me at:<br />
                 <a 
-                  href="mailto:craftednovax9826@gmail.com" 
+                  href="mailto:kavya.tshah6@gmail.com" 
                   className="text-blue-400 hover:text-blue-300 font-semibold tracking-wide transition-colors mt-2 inline-block"
                 >
                   craftednovax9826@gmail.com
