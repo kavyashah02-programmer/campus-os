@@ -67,7 +67,7 @@ const Sidebar = ({ currentView, setCurrentView }) => {
 
         {/* August AI WhatsApp Quick Link */}
         <a 
-          href="https://wa.me/+918738030604" 
+          href="https://play.google.com/store/search?q=August%20Ai&c=apps&hl=en_IN" 
           target="_blank" 
           rel="noopener noreferrer"
           title="Chat with August AI"
