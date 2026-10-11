@@ -102,7 +102,7 @@ const AnimalDonation = () => {
                   href="mailto:kavya.tshah6@gmail.com" 
                   className="text-blue-400 hover:text-blue-300 font-semibold tracking-wide transition-colors mt-2 inline-block"
                 >
-                  craftednovax9826@gmail.com
+                  kavya.tshah6@gmail.com
                 </a>
               </p>
             </div>
