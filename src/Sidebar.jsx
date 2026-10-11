@@ -65,12 +65,12 @@ const Sidebar = ({ currentView, setCurrentView }) => {
           );
         })}
 
-        {/* August AI WhatsApp Quick Link */}
+        {/* August AI Play Store Quick Link */}
         <a 
           href="https://play.google.com/store/search?q=August%20Ai&c=apps&hl=en_IN" 
           target="_blank" 
           rel="noopener noreferrer"
-          title="Chat with August AI"
+          title="August AI on Google Play"
           className="w-full flex items-center p-3 rounded-xl transition-all duration-200 group bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 mt-4"
         >
           <span className="text-xl flex items-center justify-center w-8 h-8 rounded-lg">
