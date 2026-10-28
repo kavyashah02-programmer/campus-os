@@ -6,17 +6,20 @@ const getLocalDate = (d = new Date()) => {
 };
 
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const CLASS_TYPES = ['Lecture', 'Tutorial', 'Lab'];
 
 const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData }) => {
   
   const [schedules, setSchedules] = useLocalStorageSync('attendanceSchedules', cloudAttendance.schedules || []);
   const [records, setRecords] = useLocalStorageSync('attendanceRecords', cloudAttendance.records || {});
+  const [threshold, setThreshold] = useLocalStorageSync('attendanceThreshold', cloudAttendance.threshold || 75);
+  const [customClassTypes, setCustomClassTypes] = useLocalStorageSync('attendanceClassTypes', cloudAttendance.classTypes || ['Lecture', 'Tutorial', 'Lab']);
 
   useEffect(() => {
     if (cloudAttendance.schedules) setSchedules(cloudAttendance.schedules);
     if (cloudAttendance.records) setRecords(cloudAttendance.records);
-  }, [cloudAttendance, setSchedules, setRecords]);
+    if (cloudAttendance.threshold) setThreshold(cloudAttendance.threshold);
+    if (cloudAttendance.classTypes) setCustomClassTypes(cloudAttendance.classTypes);
+  }, [cloudAttendance, setSchedules, setRecords, setThreshold, setCustomClassTypes]);
 
   const safeSubjects = Array.isArray(cloudSubjects) ? cloudSubjects : [];
   const safeSchedules = Array.isArray(schedules) ? schedules : [];
@@ -24,23 +27,26 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
 
   const [activeTab, setActiveTab] = useState('mark'); 
   
-  // Setup Form State
   const [subject, setSubject] = useState('');
-  const [classType, setClassType] = useState('Lecture'); // NEW: Class Type state
+  const [classType, setClassType] = useState(customClassTypes[0] || ''); 
   const [dayOfWeek, setDayOfWeek] = useState('Monday');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
 
-  // Report & Mark State
+  const [isManagingTypes, setIsManagingTypes] = useState(false);
+  const [newTypeInput, setNewTypeInput] = useState('');
+
   const [targetDate, setTargetDate] = useState(getLocalDate());
   const [startDate, setStartDate] = useState(getLocalDate(new Date(new Date().setDate(new Date().getDate() - 30)))); 
   const [endDate, setEndDate] = useState(getLocalDate());
 
-  const saveToCloud = (newSchedules, newRecords) => {
+  const saveToCloud = (newSchedules, newRecords, newThreshold = threshold, newClassTypes = customClassTypes) => {
     setSchedules(newSchedules);
     setRecords(newRecords);
+    setThreshold(newThreshold);
+    setCustomClassTypes(newClassTypes);
     if (updateCloudData) {
-      updateCloudData('attendance', { schedules: newSchedules, records: newRecords });
+      updateCloudData('attendance', { schedules: newSchedules, records: newRecords, threshold: newThreshold, classTypes: newClassTypes });
     }
   };
 
@@ -80,7 +86,23 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
     saveToCloud(safeSchedules, newRecords);
   };
 
-  // --- REPORT GENERATOR ENGINE ---
+  const handleAddCustomType = () => {
+    if(newTypeInput.trim() && !customClassTypes.includes(newTypeInput.trim())) {
+      const updatedTypes = [...customClassTypes, newTypeInput.trim()];
+      saveToCloud(safeSchedules, safeRecords, threshold, updatedTypes);
+      setClassType(newTypeInput.trim());
+      setNewTypeInput('');
+    }
+  };
+
+  const handleRemoveCustomType = (typeToRemove) => {
+    if (window.confirm(`Remove "${typeToRemove}" from options? (Existing classes will keep this label)`)) {
+      const updatedTypes = customClassTypes.filter(t => t !== typeToRemove);
+      saveToCloud(safeSchedules, safeRecords, threshold, updatedTypes);
+      if (classType === typeToRemove) setClassType(updatedTypes[0] || '');
+    }
+  };
+
   const generateReport = () => {
     const reportDays = [];
     const subjectStats = {};
@@ -104,7 +126,6 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
           const key = `${dateStr}_${cls.id}`;
           const status = safeRecords[key]; 
           
-          // Generate a unique stat key like "Physics (Lab)"
           const statKey = `${cls.subject} ${cls.classType ? `(${cls.classType})` : ''}`;
           
           if (!subjectStats[statKey]) {
@@ -140,7 +161,19 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
   const getTypeColor = (type) => {
     if (type === 'Lab') return 'text-purple-400 bg-purple-900/20 border-purple-900/50';
     if (type === 'Tutorial') return 'text-amber-400 bg-amber-900/20 border-amber-900/50';
-    return 'text-blue-400 bg-blue-900/20 border-blue-900/50';
+    if (type === 'Lecture') return 'text-blue-400 bg-blue-900/20 border-blue-900/50';
+    
+    // Auto-generate consistent colors for custom types
+    const colors = [
+      'text-pink-400 bg-pink-900/20 border-pink-900/50',
+      'text-emerald-400 bg-emerald-900/20 border-emerald-900/50',
+      'text-orange-400 bg-orange-900/20 border-orange-900/50',
+      'text-cyan-400 bg-cyan-900/20 border-cyan-900/50',
+      'text-fuchsia-400 bg-fuchsia-900/20 border-fuchsia-900/50',
+      'text-rose-400 bg-rose-900/20 border-rose-900/50'
+    ];
+    const charTotal = type.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    return colors[charTotal % colors.length];
   };
 
   return (
@@ -158,48 +191,85 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
         </div>
       </header>
 
-      {/* --- TAB: CLASS SETUP --- */}
       {activeTab === 'setup' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg h-fit">
-            <h2 className="text-lg font-bold text-white mb-6 border-b border-gray-800 pb-3 flex items-center gap-2">
-              <svg className="w-5 h-5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg> Add Weekly Class
-            </h2>
-            <form onSubmit={handleAddClass} className="space-y-4">
+          <div className="lg:col-span-1 flex flex-col gap-6">
+            
+            <div className="bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg h-fit">
+              <h2 className="text-lg font-bold text-white mb-4 border-b border-gray-800 pb-3 flex items-center gap-2">
+                <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Alert Settings
+              </h2>
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Subject</label>
-                <select required value={subject} onChange={e => setSubject(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none transition-colors">
-                  <option value="" disabled>Select Subject...</option>
-                  {safeSubjects.length === 0 && <option value="" disabled>⚠️ Add subjects in Subjects module first</option>}
-                  {safeSubjects.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                </select>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Minimum Attendance Target (%)</label>
+                <input type="number" min="0" max="100" value={threshold} onChange={e => saveToCloud(safeSchedules, safeRecords, Number(e.target.value))} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-yellow-500 outline-none transition-colors" />
+                <p className="text-[10px] text-gray-500 mt-2">Subjects falling below this value will trigger a warning on your Dashboard.</p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+            </div>
+
+            <div className="bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg h-fit">
+              <h2 className="text-lg font-bold text-white mb-6 border-b border-gray-800 pb-3 flex items-center gap-2">
+                <svg className="w-5 h-5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg> Add Weekly Class
+              </h2>
+              <form onSubmit={handleAddClass} className="space-y-4">
                 <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Class Type</label>
-                  <select value={classType} onChange={e => setClassType(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none transition-colors">
-                    {CLASS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Subject</label>
+                  <select required value={subject} onChange={e => setSubject(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none transition-colors">
+                    <option value="" disabled>Select Subject...</option>
+                    {safeSubjects.length === 0 && <option value="" disabled>⚠️ Add subjects in Subjects module first</option>}
+                    {safeSubjects.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Day of Week</label>
-                  <select value={dayOfWeek} onChange={e => setDayOfWeek(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none transition-colors">
-                    {DAYS_OF_WEEK.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Class Type</label>
+                      <button type="button" onClick={() => setIsManagingTypes(!isManagingTypes)} className="text-[10px] text-teal-500 hover:text-teal-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                         {isManagingTypes ? 'Done' : '⚙️ Manage'}
+                      </button>
+                    </div>
+                    {isManagingTypes ? (
+                      <div className="bg-black border border-gray-700 rounded-xl p-2.5 space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                        {customClassTypes.map(t => (
+                          <div key={t} className="flex justify-between items-center text-xs text-white bg-gray-900 px-2 py-1.5 rounded-lg border border-gray-800">
+                            <span className="truncate pr-2">{t}</span>
+                            <button type="button" onClick={() => handleRemoveCustomType(t)} className="text-gray-500 hover:text-red-400 font-bold p-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                          </div>
+                        ))}
+                        <div className="flex gap-2 pt-1 border-t border-gray-800 mt-2">
+                          <input type="text" value={newTypeInput} onChange={e => setNewTypeInput(e.target.value)} placeholder="New type..." className="w-full bg-[#121212] border border-gray-800 text-white rounded-lg px-2 py-1.5 text-xs focus:border-teal-500 outline-none" />
+                          <button type="button" onClick={handleAddCustomType} className="bg-gray-800 hover:bg-gray-700 text-white px-2 py-1.5 rounded-lg text-xs font-bold shrink-0 shadow-sm">+</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <select value={classType} onChange={e => setClassType(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none transition-colors">
+                        {customClassTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                        {customClassTypes.length === 0 && <option value="" disabled>No types available</option>}
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Day of Week</label>
+                    <select value={dayOfWeek} onChange={e => setDayOfWeek(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none transition-colors">
+                      {DAYS_OF_WEEK.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Start Time</label>
-                  <input type="time" required value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none [color-scheme:dark]" />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Start Time</label>
+                    <input type="time" required value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none [color-scheme:dark]" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">End Time</label>
+                    <input type="time" required value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none [color-scheme:dark]" />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">End Time</label>
-                  <input type="time" required value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none [color-scheme:dark]" />
-                </div>
-              </div>
-              <button type="submit" className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-3 rounded-xl shadow-lg transition-colors mt-4">Save Class</button>
-            </form>
+                <button type="submit" className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-3 rounded-xl shadow-lg transition-colors mt-4">Save Class</button>
+              </form>
+            </div>
           </div>
 
           <div className="lg:col-span-2 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg">
@@ -241,7 +311,6 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
         </div>
       )}
 
-      {/* --- TAB: MARK ATTENDANCE --- */}
       {activeTab === 'mark' && (() => {
         const targetDayName = DAYS_OF_WEEK[new Date(targetDate).getDay()];
         const todayClasses = safeSchedules.filter(s => s.dayOfWeek === targetDayName).sort((a,b) => a.startTime.localeCompare(b.startTime));
@@ -291,7 +360,6 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
         );
       })()}
 
-      {/* --- TAB: DETAILED REPORTS --- */}
       {activeTab === 'report' && (
         <div className="space-y-6">
           
@@ -317,9 +385,9 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
                 <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Total Absent</p>
                 <p className="text-2xl font-black text-red-400">{totalA}</p>
               </div>
-              <div className={`border rounded-xl px-6 py-3 text-center flex-1 shadow-lg ${overall >= 75 ? 'bg-teal-900/20 border-teal-500/50' : overall >= 60 ? 'bg-yellow-900/20 border-yellow-500/50' : 'bg-red-900/20 border-red-500/50'}`}>
+              <div className={`border rounded-xl px-6 py-3 text-center flex-1 shadow-lg ${overall >= threshold ? 'bg-teal-900/20 border-teal-500/50' : overall >= threshold - 15 ? 'bg-yellow-900/20 border-yellow-500/50' : 'bg-red-900/20 border-red-500/50'}`}>
                 <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Overall %</p>
-                <p className={`text-2xl font-black ${overall >= 75 ? 'text-teal-400' : overall >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>{overall}%</p>
+                <p className={`text-2xl font-black ${overall >= threshold ? 'text-teal-400' : overall >= threshold - 15 ? 'text-yellow-400' : 'text-red-400'}`}>{overall}%</p>
               </div>
             </div>
           </div>
@@ -327,11 +395,14 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             <div className="lg:col-span-1 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg h-fit">
-              <h3 className="text-white font-bold mb-4 border-b border-gray-800 pb-3">Subject Summary</h3>
+              <h3 className="text-white font-bold mb-4 border-b border-gray-800 pb-3 flex items-center justify-between">
+                Subject Summary
+                <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider bg-gray-900 border border-gray-800 px-2 py-0.5 rounded">Target: {threshold}%</span>
+              </h3>
               <div className="space-y-4">
                 {Object.entries(subjectStats).map(([statKey, stats]) => {
-                  const subPct = stats.totalMarked === 0 ? 0 : Math.round((stats.present / stats.totalMarked) * 100);
-                  const colorClass = subPct >= 75 ? 'text-teal-400' : subPct >= 60 ? 'text-yellow-400' : 'text-red-400';
+                  const subPct = stats.totalMarked === 0 ? 100 : Math.round((stats.present / stats.totalMarked) * 100);
+                  const colorClass = subPct >= threshold ? 'text-teal-400' : subPct >= threshold - 15 ? 'text-yellow-400' : 'text-red-400';
                   
                   return (
                     <div key={statKey} className="bg-black border border-gray-800 p-4 rounded-xl">
