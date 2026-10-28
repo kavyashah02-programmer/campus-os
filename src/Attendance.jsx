@@ -6,6 +6,7 @@ const getLocalDate = (d = new Date()) => {
 };
 
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const CLASS_TYPES = ['Lecture', 'Tutorial', 'Lab'];
 
 const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData }) => {
   
@@ -25,13 +26,14 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
   
   // Setup Form State
   const [subject, setSubject] = useState('');
+  const [classType, setClassType] = useState('Lecture'); // NEW: Class Type state
   const [dayOfWeek, setDayOfWeek] = useState('Monday');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
 
   // Report & Mark State
   const [targetDate, setTargetDate] = useState(getLocalDate());
-  const [startDate, setStartDate] = useState(getLocalDate(new Date(new Date().setDate(new Date().getDate() - 30)))); // Default 30 days ago
+  const [startDate, setStartDate] = useState(getLocalDate(new Date(new Date().setDate(new Date().getDate() - 30)))); 
   const [endDate, setEndDate] = useState(getLocalDate());
 
   const saveToCloud = (newSchedules, newRecords) => {
@@ -49,6 +51,7 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
     const newClass = {
       id: Date.now().toString(),
       subject,
+      classType, 
       dayOfWeek,
       startTime,
       endTime
@@ -69,9 +72,9 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
     const newRecords = { ...safeRecords };
     
     if (newRecords[key] === status) {
-      delete newRecords[key]; // Toggle off
+      delete newRecords[key]; 
     } else {
-      newRecords[key] = status; // Set P or A
+      newRecords[key] = status; 
     }
     
     saveToCloud(safeSchedules, newRecords);
@@ -101,17 +104,20 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
           const key = `${dateStr}_${cls.id}`;
           const status = safeRecords[key]; 
           
-          if (!subjectStats[cls.subject]) {
-            subjectStats[cls.subject] = { present: 0, absent: 0, totalMarked: 0 };
+          // Generate a unique stat key like "Physics (Lab)"
+          const statKey = `${cls.subject} ${cls.classType ? `(${cls.classType})` : ''}`;
+          
+          if (!subjectStats[statKey]) {
+            subjectStats[statKey] = { present: 0, absent: 0, totalMarked: 0 };
           }
           
           if (status === 'P') {
-            subjectStats[cls.subject].present++;
-            subjectStats[cls.subject].totalMarked++;
+            subjectStats[statKey].present++;
+            subjectStats[statKey].totalMarked++;
             totalP++;
           } else if (status === 'A') {
-            subjectStats[cls.subject].absent++;
-            subjectStats[cls.subject].totalMarked++;
+            subjectStats[statKey].absent++;
+            subjectStats[statKey].totalMarked++;
             totalA++;
           }
           
@@ -130,6 +136,12 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
   };
 
   const { reportDays, subjectStats, overall, totalP, totalA } = generateReport();
+
+  const getTypeColor = (type) => {
+    if (type === 'Lab') return 'text-purple-400 bg-purple-900/20 border-purple-900/50';
+    if (type === 'Tutorial') return 'text-amber-400 bg-amber-900/20 border-amber-900/50';
+    return 'text-blue-400 bg-blue-900/20 border-blue-900/50';
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 h-full flex flex-col pb-10">
@@ -162,11 +174,19 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
                   {safeSubjects.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Day of Week</label>
-                <select value={dayOfWeek} onChange={e => setDayOfWeek(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none transition-colors">
-                  {DAYS_OF_WEEK.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Class Type</label>
+                  <select value={classType} onChange={e => setClassType(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none transition-colors">
+                    {CLASS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Day of Week</label>
+                  <select value={dayOfWeek} onChange={e => setDayOfWeek(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-teal-500 outline-none transition-colors">
+                    {DAYS_OF_WEEK.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -196,8 +216,15 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
                       {dayClasses.map(cls => (
                         <div key={cls.id} className="bg-black border border-gray-700 p-4 rounded-xl flex justify-between items-center group hover:border-gray-500 transition-colors">
                           <div>
-                            <p className="font-bold text-white text-sm">{cls.subject}</p>
-                            <p className="text-teal-400 text-xs mt-1 font-medium bg-teal-900/10 px-2 py-0.5 rounded border border-teal-900/30 inline-block">🕒 {cls.startTime} - {cls.endTime}</p>
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-bold text-white text-sm">{cls.subject}</p>
+                              {cls.classType && (
+                                <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${getTypeColor(cls.classType)}`}>
+                                  {cls.classType}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-teal-400 text-xs font-medium bg-teal-900/10 px-2 py-0.5 rounded border border-teal-900/30 inline-block">🕒 {cls.startTime} - {cls.endTime}</p>
                           </div>
                           <button onClick={() => handleDeleteClass(cls.id)} className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-2">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -241,8 +268,15 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
                   return (
                     <div key={cls.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${status === 'P' ? 'bg-teal-900/10 border-teal-500/50' : status === 'A' ? 'bg-red-900/10 border-red-500/50' : 'bg-black border-gray-700'}`}>
                       <div>
-                        <h4 className="text-white font-bold text-lg">{cls.subject}</h4>
-                        <span className="text-[10px] text-gray-400 bg-gray-900 px-2 py-0.5 rounded border border-gray-700 font-mono mt-1 inline-block">{cls.startTime} - {cls.endTime}</span>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="text-white font-bold text-lg">{cls.subject}</h4>
+                          {cls.classType && (
+                            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${getTypeColor(cls.classType)}`}>
+                              {cls.classType}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-gray-400 bg-gray-900 px-2 py-0.5 rounded border border-gray-700 font-mono inline-block">{cls.startTime} - {cls.endTime}</span>
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => handleMarkAttendance(targetDate, cls.id, 'P')} className={`w-12 h-12 rounded-xl font-black text-lg flex items-center justify-center transition-all ${status === 'P' ? 'bg-teal-500 text-black shadow-[0_0_15px_rgba(20,184,166,0.4)]' : 'bg-gray-800 text-gray-500 hover:bg-gray-700'}`}>P</button>
@@ -295,14 +329,14 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
             <div className="lg:col-span-1 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg h-fit">
               <h3 className="text-white font-bold mb-4 border-b border-gray-800 pb-3">Subject Summary</h3>
               <div className="space-y-4">
-                {Object.entries(subjectStats).map(([sub, stats]) => {
+                {Object.entries(subjectStats).map(([statKey, stats]) => {
                   const subPct = stats.totalMarked === 0 ? 0 : Math.round((stats.present / stats.totalMarked) * 100);
                   const colorClass = subPct >= 75 ? 'text-teal-400' : subPct >= 60 ? 'text-yellow-400' : 'text-red-400';
                   
                   return (
-                    <div key={sub} className="bg-black border border-gray-800 p-4 rounded-xl">
+                    <div key={statKey} className="bg-black border border-gray-800 p-4 rounded-xl">
                       <div className="flex justify-between items-center mb-2">
-                        <span className="font-bold text-white text-sm">{sub}</span>
+                        <span className="font-bold text-white text-sm">{statKey}</span>
                         <span className={`font-black text-lg ${colorClass}`}>{subPct}%</span>
                       </div>
                       <div className="flex gap-4 text-xs font-medium text-gray-400 bg-[#121212] p-2 rounded-lg border border-gray-800/50">
@@ -337,7 +371,10 @@ const Attendance = ({ cloudAttendance = {}, cloudSubjects = [], updateCloudData 
                       {day.classes.map(cls => (
                         <div key={cls.id} onClick={() => handleMarkAttendance(day.date, cls.id, cls.status === 'P' ? 'A' : cls.status === 'A' ? undefined : 'P')} className={`cursor-pointer border p-3 rounded-xl transition-all ${cls.status === 'P' ? 'bg-teal-900/10 border-teal-500/30 hover:border-teal-500' : cls.status === 'A' ? 'bg-red-900/10 border-red-500/30 hover:border-red-500' : 'bg-black border-gray-800 hover:border-gray-600 border-dashed'}`}>
                           <div className="flex justify-between items-start mb-1.5">
-                            <span className="font-bold text-white text-xs truncate pr-2">{cls.subject}</span>
+                            <div className="truncate pr-2">
+                              <span className="font-bold text-white text-xs block truncate">{cls.subject}</span>
+                              {cls.classType && <span className={`text-[8px] font-bold uppercase tracking-wider ${getTypeColor(cls.classType).split(' ')[0]}`}>{cls.classType}</span>}
+                            </div>
                             <span className={`shrink-0 w-5 h-5 rounded flex items-center justify-center text-[10px] font-black ${cls.status === 'P' ? 'bg-teal-500 text-black' : cls.status === 'A' ? 'bg-red-500 text-white' : 'bg-gray-800 text-gray-500'}`}>
                               {cls.status || '?'}
                             </span>
