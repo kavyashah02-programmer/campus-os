@@ -23,6 +23,7 @@ import Library from './Library';
 import AnimalDonation from './AnimalDonation';
 import MotivationalQuote from './MotivationalQuote';
 import BucketList from './BucketList';
+import Attendance from './Attendance';
 
 const MAX_DEVICES = 2;
 
@@ -680,6 +681,7 @@ function App() {
         {currentView === 'library' && <Library cloudLibrary={cloudData.library || []} updateCloudData={updateCloudData} />}
         {currentView === 'donate' && <AnimalDonation cloudDonations={cloudData.donations || []} updateCloudData={updateCloudData} />}
         {currentView === 'subjects' && <Subjects cloudSubjects={cloudData.subjects || []} updateCloudData={updateCloudData} />}
+        {currentView === 'attendance' && <Attendance cloudAttendance={cloudData.attendance || {}} cloudSubjects={cloudData.subjects || []} updateCloudData={updateCloudData} />}
         {currentView === 'bucketlist' && <BucketList cloudBucketList={cloudData.bucketList || []} updateCloudData={updateCloudData} />}
         {currentView === 'laundry' && (
           <div className="animate-in fade-in duration-500 h-full max-w-4xl mx-auto">

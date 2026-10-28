@@ -7,6 +7,7 @@ const Sidebar = ({ currentView, setCurrentView }) => {
     { id: 'subjects', icon: '📖', label: 'Subjects', color: 'text-fuchsia-500' },
     { id: 'tasks', icon: '✅', label: 'Task Manager', color: 'text-indigo-500' },
     { id: 'planner', icon: '📅', label: 'Daily Planner', color: 'text-purple-500' },
+    { id: 'attendance', icon: '✋', label: 'Attendance', color: 'text-teal-500' },
     { id: 'habits', icon: '🔄', label: 'Habit Tracker', color: 'text-emerald-500' },
     { id: 'fitness', icon: '💪', label: 'Fitness & Health', color: 'text-sky-500' },
     { id: 'finance', icon: '💰', label: 'Finance & Budget', color: 'text-emerald-400' },
