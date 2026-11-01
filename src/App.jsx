@@ -687,6 +687,11 @@ function App() {
               </div>
             )}
 
+            {/* DEDICATED HORIZONTAL QUOTE ROW */}
+            <div className="w-full">
+              <MotivationalQuote />
+            </div>
+
             {/* REBALANCED 3-COLUMN GRID */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start mb-6">
               <div className="col-span-1 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg w-full h-full">
@@ -704,11 +709,6 @@ function App() {
                  <p className="text-5xl font-bold text-white flex items-center gap-2">{progressPercentage > 75 ? '🔥' : '🧊'} {currentStreak}<span className={`text-lg font-normal mt-3 ${progressPercentage > 75 ? 'text-emerald-400' : 'text-gray-600'}`}>days</span></p>
                  <p className="text-xs text-gray-500 mt-2 text-center">{progressPercentage}% / 75% required</p>
               </div>
-            </div>
-
-            {/* DEDICATED HORIZONTAL QUOTE ROW */}
-            <div className="w-full">
-              <MotivationalQuote />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
