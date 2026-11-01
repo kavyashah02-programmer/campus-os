@@ -4,8 +4,11 @@ import { useLocalStorageSync } from './useLocalStorageSync';
 const SEMESTERS = Array.from({length: 10}, (_, i) => `Semester ${i + 1}`);
 
 const Subjects = ({ cloudSubjects = [], cloudActiveSemester = 'Semester 1', updateCloudData }) => {
+  // Sync arrays/objects normally
   const [subjects, setSubjects] = useLocalStorageSync('subjectsData', cloudSubjects);
-  const [activeSemester, setActiveSemester] = useLocalStorageSync('activeSemesterData', cloudActiveSemester);
+  
+  // FIX: Use standard state for strings to prevent JSON.parse() syntax crashes
+  const [activeSemester, setActiveSemester] = useState(cloudActiveSemester || 'Semester 1');
 
   useEffect(() => {
     if (cloudSubjects && cloudSubjects.length > 0) setSubjects(cloudSubjects);
@@ -13,7 +16,7 @@ const Subjects = ({ cloudSubjects = [], cloudActiveSemester = 'Semester 1', upda
   
   useEffect(() => {
     if (cloudActiveSemester) setActiveSemester(cloudActiveSemester);
-  }, [cloudActiveSemester, setActiveSemester]);
+  }, [cloudActiveSemester]);
 
   const safeSubjects = Array.isArray(subjects) ? subjects : [];
 
@@ -28,7 +31,7 @@ const Subjects = ({ cloudSubjects = [], cloudActiveSemester = 'Semester 1', upda
 
   const handleSave = (e) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name || !name.trim()) return; // Added safety check
 
     let updatedSubjects;
     if (editingId) {
@@ -45,7 +48,7 @@ const Subjects = ({ cloudSubjects = [], cloudActiveSemester = 'Semester 1', upda
 
   const handleEdit = (subject) => {
     setEditingId(subject.id);
-    setName(subject.name);
+    setName(subject.name || '');
   };
 
   const handleDelete = (id) => {
