@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactApexChart from 'react-apexcharts';
 
-// --- FIREBASE IMPORTS ---
 import { auth, db } from './firebase'; 
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore'; 
 
-// --- COMPONENTS ---
 import Subjects from './Subjects';
 import Sidebar from './Sidebar';
 import HabitHeatmap from './HabitHeatmap';
@@ -27,7 +25,6 @@ import Attendance from './Attendance';
 
 const MAX_DEVICES = 2;
 
-// --- DEVICE VERIFICATION LOGIC ---
 const enforceDeviceLimit = async (user) => {
   let deviceId = localStorage.getItem('campusos_device_id');
   if (!deviceId) {
@@ -70,7 +67,6 @@ const enforceDeviceLimit = async (user) => {
 
 
 function App() {
-  // --- FIREBASE AUTH STATE ---
   const [user, setUser] = useState(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -78,16 +74,13 @@ function App() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
-  // --- MASTER CLOUD DATA STATE ---
   const [cloudData, setCloudData] = useState({});
   const [isDataLoading, setIsDataLoading] = useState(false);
 
-  // --- DEVICE MANAGEMENT STATE ---
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [registeredDevices, setRegisteredDevices] = useState([]);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
 
-  // --- DASHBOARD UI STATE ---
   const [currentView, setCurrentView] = useState('dashboard');
   const [timeStr, setTimeStr] = useState('');
   const [focusMode, setFocusMode] = useState('stopwatch'); 
@@ -97,7 +90,18 @@ function App() {
   const timerStartRef = useRef(null);
   const [spotifyEmbed, setSpotifyEmbed] = useState('https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?theme=0');
 
-  // --- LOCALSTORAGE PERSISTENT STATES ---
+  // --- NEW TIMER SUBJECT TRACKING STATE ---
+  const [focusSubjects, setFocusSubjects] = useState(() => {
+    try {
+      const saved = localStorage.getItem('focusTracker_subjectsData');
+      if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    return cloudData.focusSubjects || ['Mathematics', 'Physics', 'Coding'];
+  });
+  const [selectedFocusSubject, setSelectedFocusSubject] = useState('');
+  const [isManagingFocusSubjects, setIsManagingFocusSubjects] = useState(false);
+  const [newFocusSubject, setNewFocusSubject] = useState('');
+
   const [habits, setHabits] = useState(() => {
     try {
       const saved = localStorage.getItem('habitTracker_habitsData');
@@ -128,10 +132,8 @@ function App() {
   useEffect(() => localStorage.setItem('habitTracker_habitsData', JSON.stringify(habits)), [habits]);
   useEffect(() => localStorage.setItem('habitTracker_logsData', JSON.stringify(habitLogs)), [habitLogs]);
   useEffect(() => localStorage.setItem('focusTracker_logsData', JSON.stringify(focusLogs)), [focusLogs]);
+  useEffect(() => localStorage.setItem('focusTracker_subjectsData', JSON.stringify(focusSubjects)), [focusSubjects]);
 
-  // --------------------------------------------------------
-  // 1. AUTHENTICATION LISTENER
-  // --------------------------------------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -140,15 +142,11 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // --------------------------------------------------------
-  // 2. MASTER CLOUD SYNC & DATA RETENTION ENGINE
-  // --------------------------------------------------------
   useEffect(() => {
     if (user) {
       setIsDataLoading(true);
       const userRef = doc(db, 'users', user.uid);
       
-      // --- THE AUTO-CLEANUP ENGINE (Runs once daily to delete 6-month-old data) ---
       const runDataRetentionCleanup = async (data) => {
         const today = new Date().toISOString().split('T')[0];
         const lastCleanup = localStorage.getItem('campusos_last_cleanup');
@@ -233,6 +231,9 @@ function App() {
           if (data.focusLogs) {
              setFocusLogs(prev => JSON.stringify(prev) !== JSON.stringify(data.focusLogs) ? data.focusLogs : prev);
           }
+          if (data.focusSubjects) {
+             setFocusSubjects(prev => JSON.stringify(prev) !== JSON.stringify(data.focusSubjects) ? data.focusSubjects : prev);
+          }
           if (data.spotifyEmbed) {
              setSpotifyEmbed(prev => prev !== data.spotifyEmbed ? data.spotifyEmbed : prev);
           }
@@ -270,14 +271,17 @@ function App() {
   }, [focusLogs, user, isDataLoading, cloudData.focusLogs]);
 
   useEffect(() => {
+    if (user && !isDataLoading && focusSubjects.length > 0) {
+      if (JSON.stringify(focusSubjects) !== JSON.stringify(cloudData.focusSubjects)) updateCloudData('focusSubjects', focusSubjects);
+    }
+  }, [focusSubjects, user, isDataLoading, cloudData.focusSubjects]);
+
+  useEffect(() => {
     if (user && !isDataLoading && spotifyEmbed) {
       if (spotifyEmbed !== cloudData.spotifyEmbed) updateCloudData('spotifyEmbed', spotifyEmbed);
     }
   }, [spotifyEmbed, user, isDataLoading, cloudData.spotifyEmbed]);
 
-  // --------------------------------------------------------
-  // 3. DEVICE SETTINGS FETCHER
-  // --------------------------------------------------------
   useEffect(() => {
     if (isSettingsOpen && user) {
       const fetchDevices = async () => {
@@ -292,9 +296,6 @@ function App() {
   }, [isSettingsOpen, user]);
 
 
-  // --------------------------------------------------------
-  // 4. UTILITIES & CALCULATIONS
-  // --------------------------------------------------------
   const getLocalDateStr = (d = new Date()) => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
@@ -332,32 +333,109 @@ function App() {
   const overviewOptions = { chart: { type: 'area', toolbar: { show: false }, background: 'transparent' }, colors: ['#10b981'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 90, 100] } }, dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 2 }, xaxis: { categories: overviewCategories, axisBorder: { show: false }, axisTicks: { show: false }, labels: { style: { colors: '#6b7280' } } }, yaxis: { show: false, min: 0, max: 100 }, grid: { show: false }, theme: { mode: 'dark' } };
   const overviewSeries = [{ name: 'Completion %', data: overviewSeriesData }];
 
-  const focusSeriesData = last7Days.map(dStr => {
-    const secs = focusLogs[dStr] || 0;
-    return Math.round(secs / 60); 
+  // --- DYNAMIC STACKED SUBJECT GRAPH LOGIC ---
+  const allFocusSubjects = new Set();
+  last7Days.forEach(dStr => {
+    const log = focusLogs[dStr];
+    if (typeof log === 'object' && log !== null) {
+      Object.keys(log).forEach(k => { if (k !== 'total') allFocusSubjects.add(k); });
+    } else if (typeof log === 'number' && log > 0) {
+      allFocusSubjects.add('Uncategorized');
+    }
   });
+  
+  const activeChartSubjects = Array.from(allFocusSubjects);
+  if (activeChartSubjects.length === 0) activeChartSubjects.push('Focus Time');
+
+  const focusSeries = activeChartSubjects.map(subj => ({
+    name: subj,
+    data: last7Days.map(dStr => {
+      const log = focusLogs[dStr];
+      if (!log) return 0;
+      if (typeof log === 'number') {
+        return (subj === 'Uncategorized' || subj === 'Focus Time') ? Math.round(log / 60) : 0;
+      }
+      return Math.round((log[subj] || 0) / 60);
+    })
+  }));
 
   const focusOptions = { 
-    chart: { type: 'bar', toolbar: { show: false }, background: 'transparent' }, 
-    colors: ['#3b82f6'], 
+    chart: { type: 'bar', stacked: true, toolbar: { show: false }, background: 'transparent' }, 
+    colors: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f43f5e', '#6366f1'], 
     plotOptions: { bar: { borderRadius: 4, columnWidth: '55%' } }, 
     dataLabels: { enabled: false }, 
     xaxis: { categories: overviewCategories, axisBorder: { show: false }, axisTicks: { show: false }, labels: { style: { colors: '#6b7280' } } }, 
     yaxis: { labels: { formatter: (val) => `${val}m`, style: { colors: '#6b7280' } } }, 
     grid: { borderColor: '#1f2937', strokeDashArray: 4 }, 
     theme: { mode: 'dark' },
-    tooltip: { y: { formatter: (val) => `${val} mins` } }
+    tooltip: { 
+      y: { formatter: (val) => `${val} mins` },
+      theme: 'dark'
+    },
+    legend: { show: false } 
   };
-  const focusSeries = [{ name: 'Focus Time', data: focusSeriesData }];
 
-  // --------------------------------------------------------
-  // 5. TIMERS, LOGS, & NOTIFICATIONS
-  // --------------------------------------------------------
+  const getLowAttendanceSubjects = () => {
+    if (!cloudData.attendance) return { lowSubjects: [], threshold: 75 };
+    
+    const attSchedules = cloudData.attendance.schedules || [];
+    const attRecords = cloudData.attendance.records || {};
+    const attThreshold = cloudData.attendance.threshold || 75;
+    const attStats = {};
+    
+    attSchedules.forEach(s => {
+      const key = `${s.subject} ${s.classType ? `(${s.classType})` : ''}`;
+      if (!attStats[key]) attStats[key] = { P: 0, total: 0 };
+    });
+    
+    Object.entries(attRecords).forEach(([keyString, status]) => {
+      const parts = keyString.split('_');
+      if (parts.length < 2) return;
+      
+      const schedId = parts[1];
+      const schedule = attSchedules.find(s => s.id === schedId);
+      
+      if (schedule) {
+        const key = `${schedule.subject} ${schedule.classType ? `(${schedule.classType})` : ''}`;
+        if (!attStats[key]) attStats[key] = { P: 0, total: 0 };
+        attStats[key].total++;
+        if (status === 'P') attStats[key].P++;
+      }
+    });
+    
+    const lowSubjects = Object.entries(attStats)
+      .map(([name, stats]) => ({
+        name,
+        pct: stats.total === 0 ? 100 : Math.round((stats.P / stats.total) * 100)
+      }))
+      .filter(s => s.pct < attThreshold && attStats[s.name]?.total > 0);
+      
+    return { lowSubjects, threshold: attThreshold };
+  };
+  
+  const attendanceAlertData = getLowAttendanceSubjects();
+
+  // --- UPDATED TIMER LOGIC FOR SUBJECT TRACKING ---
   const saveSessionToLogs = (timeToSaveInSeconds) => {
     if (timeToSaveInSeconds <= 0) return;
     setFocusLogs(prev => {
       const today = getLocalDateStr();
-      return { ...prev, [today]: (prev[today] || 0) + timeToSaveInSeconds };
+      const prevLog = prev[today];
+      let newLog = {};
+      
+      if (typeof prevLog === 'number') {
+         newLog = { Uncategorized: prevLog, total: prevLog };
+      } else if (prevLog && typeof prevLog === 'object') {
+         newLog = { ...prevLog };
+      } else {
+         newLog = { total: 0 };
+      }
+
+      const subjKey = selectedFocusSubject || 'Uncategorized';
+      newLog[subjKey] = (newLog[subjKey] || 0) + timeToSaveInSeconds;
+      newLog.total = (newLog.total || 0) + timeToSaveInSeconds;
+
+      return { ...prev, [today]: newLog };
     });
   };
 
@@ -412,9 +490,6 @@ function App() {
   }, [studyTime, isStudying, focusMode, timerTarget]);
 
 
-  // --------------------------------------------------------
-  // 6. ACTION HANDLERS
-  // --------------------------------------------------------
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -519,10 +594,6 @@ function App() {
   const progressPercentage = habits.length > 0 ? Math.round((completedTodayCount / habits.length) * 100) : 0;
 
 
-  // --------------------------------------------------------
-  // RENDER BLOCKS
-  // --------------------------------------------------------
-  
   if (isCheckingAuth || (user && isDataLoading)) {
     return (
       <div className="flex h-screen bg-black items-center justify-center font-sans flex-col">
@@ -597,37 +668,89 @@ function App() {
               </div>
             </header>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-              <div className="col-span-1 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg w-full">
+            {attendanceAlertData.lowSubjects.length > 0 && (
+              <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between shadow-lg gap-4 animate-pulse">
+                 <div className="flex items-center gap-4">
+                   <div className="bg-red-500/20 p-3 rounded-lg text-red-400 shrink-0">
+                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                   </div>
+                   <div>
+                     <h3 className="text-red-400 font-bold text-lg leading-tight">Critical Attendance Warning</h3>
+                     <p className="text-gray-400 text-sm mt-0.5">The following classes have dropped below your {attendanceAlertData.threshold}% safety threshold: 
+                       <span className="text-white font-bold ml-1">{attendanceAlertData.lowSubjects.map(s => `${s.name} (${s.pct}%)`).join(', ')}</span>
+                     </p>
+                   </div>
+                 </div>
+                 <button onClick={() => setCurrentView('attendance')} className="shrink-0 w-full md:w-auto bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2.5 rounded-lg transition-colors text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] border border-red-500 text-center">
+                   Fix Attendance Hub →
+                 </button>
+              </div>
+            )}
+
+            {/* REBALANCED 3-COLUMN GRID */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start mb-6">
+              <div className="col-span-1 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg w-full h-full">
                  <h3 className="text-emerald-400 font-semibold text-sm uppercase tracking-wider mb-2">Weekly Productivity</h3>
                  <ReactApexChart options={overviewOptions} series={overviewSeries} type="area" height={160} />
               </div>
 
-              <div className="col-span-1 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg w-full">
+              <div className="col-span-1 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg w-full h-full">
                  <h3 className="text-blue-400 font-semibold text-sm uppercase tracking-wider mb-2">Daily Focus (Mins)</h3>
                  <ReactApexChart options={focusOptions} series={focusSeries} type="bar" height={160} />
               </div>
 
-              <div className="col-span-1 flex flex-col gap-6 w-full">
-                <div className={`rounded-xl p-6 border shadow-lg flex flex-col justify-center items-center text-center transition-colors duration-500 ${progressPercentage > 75 ? 'bg-emerald-900/20 border-emerald-900/50' : 'bg-[#121212] border-gray-800'}`}>
-                   <h3 className={`${progressPercentage > 75 ? 'text-emerald-500' : 'text-gray-500'} font-semibold text-sm uppercase tracking-wider mb-2`}>Current Streak</h3>
-                   <p className="text-5xl font-bold text-white flex items-center gap-2">{progressPercentage > 75 ? '🔥' : '🧊'} {currentStreak}<span className={`text-lg font-normal mt-3 ${progressPercentage > 75 ? 'text-emerald-400' : 'text-gray-600'}`}>days</span></p>
-                   <p className="text-xs text-gray-500 mt-2 text-center">{progressPercentage}% / 75% required</p>
-                </div>
-                
-                <MotivationalQuote />
+              <div className={`col-span-1 rounded-xl p-6 border shadow-lg flex flex-col justify-center items-center text-center transition-colors duration-500 w-full h-full ${progressPercentage > 75 ? 'bg-emerald-900/20 border-emerald-900/50' : 'bg-[#121212] border-gray-800'}`}>
+                 <h3 className={`${progressPercentage > 75 ? 'text-emerald-500' : 'text-gray-500'} font-semibold text-sm uppercase tracking-wider mb-2`}>Current Streak</h3>
+                 <p className="text-5xl font-bold text-white flex items-center gap-2">{progressPercentage > 75 ? '🔥' : '🧊'} {currentStreak}<span className={`text-lg font-normal mt-3 ${progressPercentage > 75 ? 'text-emerald-400' : 'text-gray-600'}`}>days</span></p>
+                 <p className="text-xs text-gray-500 mt-2 text-center">{progressPercentage}% / 75% required</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               <div className="bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg flex flex-col items-center justify-center text-center relative overflow-hidden">
+            {/* DEDICATED HORIZONTAL QUOTE ROW */}
+            <div className="w-full">
+              <MotivationalQuote />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+               <div className="bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg flex flex-col items-center justify-center text-center relative overflow-visible">
                  {isStudying && <div className="absolute inset-0 bg-blue-900/10 animate-pulse border-2 border-blue-500/50 rounded-xl pointer-events-none"></div>}
-                 <div className="flex justify-between items-center w-full mb-4 z-10">
+                 
+                 <div className="flex justify-between items-center w-full mb-5 z-10">
                    <h3 className="text-blue-400 font-bold text-sm uppercase tracking-wider">Deep Work</h3>
                    <div className="flex bg-black p-1 rounded-lg border border-gray-800">
                      <button onClick={() => handleModeSwitch('stopwatch')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-colors ${focusMode === 'stopwatch' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Stopwatch</button>
                      <button onClick={() => handleModeSwitch('timer')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-colors ${focusMode === 'timer' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Timer</button>
                    </div>
+                 </div>
+
+                 {/* --- NEW: FOCUS SUBJECT TRACKER --- */}
+                 <div className="w-full mb-6 z-10 flex flex-col items-center">
+                    <div className="flex justify-between items-center w-full mb-1.5 px-4">
+                       <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Subject Focus</label>
+                       <button onClick={() => setIsManagingFocusSubjects(!isManagingFocusSubjects)} className="text-[10px] text-blue-500 hover:text-blue-400 font-bold uppercase tracking-wider">
+                          {isManagingFocusSubjects ? 'Done' : '⚙️ Manage'}
+                       </button>
+                    </div>
+                    
+                    {isManagingFocusSubjects ? (
+                       <div className="w-full bg-black border border-gray-800 rounded-xl p-3 space-y-2">
+                          {focusSubjects.map(s => (
+                             <div key={s} className="flex justify-between items-center text-xs text-white bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-800">
+                                <span className="truncate pr-2">{s}</span>
+                                <button onClick={() => setFocusSubjects(prev => prev.filter(x => x !== s))} className="text-gray-500 hover:text-red-400 font-bold text-sm leading-none">✕</button>
+                             </div>
+                          ))}
+                          <div className="flex gap-2 pt-2 border-t border-gray-800 mt-2">
+                             <input type="text" value={newFocusSubject} onChange={e => setNewFocusSubject(e.target.value)} placeholder="New subject..." className="w-full bg-[#121212] border border-gray-700 text-white rounded-lg px-3 py-1.5 text-xs outline-none focus:border-blue-500 transition-colors" />
+                             <button onClick={() => { if(newFocusSubject && !focusSubjects.includes(newFocusSubject)) { setFocusSubjects([...focusSubjects, newFocusSubject]); setNewFocusSubject(''); } }} className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm transition-colors">+</button>
+                          </div>
+                       </div>
+                    ) : (
+                       <select value={selectedFocusSubject} onChange={e => setSelectedFocusSubject(e.target.value)} className="w-full max-w-sm bg-black border border-gray-800 text-white rounded-lg px-4 py-2 text-sm outline-none focus:border-blue-500 transition-colors shadow-inner">
+                          <option value="">-- General / Uncategorized --</option>
+                          {focusSubjects.map(s => <option key={s} value={s}>{s}</option>)}
+                       </select>
+                    )}
                  </div>
 
                  {focusMode === 'timer' && !isStudying && studyTime === 0 ? (
@@ -637,7 +760,7 @@ function App() {
                    </div>
                  ) : ( <div className="mb-2 h-[36px]"></div> )}
 
-                 <div className="text-6xl font-black text-white font-mono mb-6 z-10 drop-shadow-md">{formatTimer(displaySeconds)}</div>
+                 <div className="text-6xl font-black text-white font-mono mb-8 z-10 drop-shadow-md">{formatTimer(displaySeconds)}</div>
                  
                  <div className="flex gap-3 w-full px-4 z-10">
                    <button onClick={toggleStudyTimer} className={`flex-1 py-3 rounded-xl font-bold text-white transition-colors shadow-lg ${isStudying ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'}`}>{isStudying ? 'Pause' : 'Start'}</button>
@@ -646,7 +769,7 @@ function App() {
 
                    <button onClick={takeBreak} disabled={!canTakeBreak} className={`flex-1 py-3 rounded-xl font-bold transition-all ${canTakeBreak ? 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`}>Break</button>
                  </div>
-                 {!canTakeBreak ? <p className="text-[10px] text-gray-500 mt-3 z-10">Break unlocks after 30 mins of active focus.</p> : <p className="text-[10px] text-emerald-500 font-bold mt-3 z-10">Break Unlocked!</p>}
+                 {!canTakeBreak ? <p className="text-[10px] text-gray-500 mt-4 z-10">Break unlocks after 30 mins of active focus.</p> : <p className="text-[10px] text-emerald-500 font-bold mt-4 z-10">Break Unlocked!</p>}
                </div>
 
                <div className="bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg flex flex-col justify-between">
@@ -665,11 +788,10 @@ function App() {
                </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-8"><HabitHeatmap habitLogs={habitLogs} /></div>
+            <div className="grid grid-cols-1 gap-8 mt-8"><HabitHeatmap habitLogs={habitLogs} /></div>
           </div>
         )}
 
-        {/* --- CLOUD HYDRATED COMPONENTS --- */}
         {currentView === 'tasks' && <TaskManager cloudTasks={cloudData.tasks || []} updateCloudData={updateCloudData} />}
         {currentView === 'planner' && <DailyPlanner cloudPlanner={cloudData.planner || []} updateCloudData={updateCloudData} />}
         {currentView === 'habits' && <HabitTracker habits={habits} setHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} updateCloudData={updateCloudData} />}
@@ -691,7 +813,6 @@ function App() {
         )}
       </main>
 
-      {/* --- SETTINGS & DEVICE MANAGEMENT MODAL --- */}
       {isSettingsOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#121212] border border-gray-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -755,7 +876,6 @@ function App() {
                 )}
               </div>
 
-              {/* DATA RETENTION NOTICE */}
               <div className="mt-8 pt-6 border-t border-gray-800">
                 <div className="flex items-start gap-3 bg-blue-900/10 border border-blue-900/30 p-4 rounded-xl">
                   <svg className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
