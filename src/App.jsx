@@ -47,7 +47,7 @@ const enforceDeviceLimit = async (user) => {
   }
 
   const userData = userSnap.data();
-  const devices = userData.registeredDevices || [];
+  const devices = userData.registeredDevices ? userData.registeredDevices : [];
 
   const isAlreadyRegistered = devices.find(d => d.id === deviceId);
   if (isAlreadyRegistered) return { allowed: true }; 
@@ -87,16 +87,20 @@ function App() {
   const [timerTarget, setTimerTarget] = useState(45); 
   const [studyTime, setStudyTime] = useState(0); 
   const [isStudying, setIsStudying] = useState(false);
+  
+  // --- NEW BREAK SYSTEM STATE ---
+  const [isOnBreak, setIsOnBreak] = useState(false);
+  const [breakTimeLeft, setBreakTimeLeft] = useState(0);
+
   const timerStartRef = useRef(null);
   const [spotifyEmbed, setSpotifyEmbed] = useState('https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?theme=0');
 
-  // --- NEW TIMER SUBJECT TRACKING STATE ---
   const [focusSubjects, setFocusSubjects] = useState(() => {
     try {
       const saved = localStorage.getItem('focusTracker_subjectsData');
       if (saved) return JSON.parse(saved);
     } catch(e) {}
-    return cloudData.focusSubjects || ['Mathematics', 'Physics', 'Coding'];
+    return cloudData.focusSubjects ? cloudData.focusSubjects : ['Mathematics', 'Physics', 'Coding'];
   });
   const [selectedFocusSubject, setSelectedFocusSubject] = useState('');
   const [isManagingFocusSubjects, setIsManagingFocusSubjects] = useState(false);
@@ -163,13 +167,21 @@ function App() {
 
         if (cleaned.tasks) {
           const len = cleaned.tasks.length;
-          cleaned.tasks = cleaned.tasks.filter(t => (t.repeat && t.repeat !== 'none') || new Date(t.deadline || t.date).getTime() >= thresholdTime);
+          cleaned.tasks = cleaned.tasks.filter(t => {
+              const isRepeating = t.repeat ? (t.repeat !== 'none' ? true : false) : false;
+              const targetTime = new Date(t.deadline ? t.deadline : t.date).getTime();
+              return isRepeating ? true : (targetTime >= thresholdTime);
+          });
           if (cleaned.tasks.length !== len) hasDeletions = true;
         }
 
         if (cleaned.planner) {
           const len = cleaned.planner.length;
-          cleaned.planner = cleaned.planner.filter(b => (b.repeat && b.repeat !== 'Once') || new Date(b.date).getTime() >= thresholdTime);
+          cleaned.planner = cleaned.planner.filter(b => {
+              const isRepeating = b.repeat ? (b.repeat !== 'Once' ? true : false) : false;
+              const targetTime = new Date(b.date).getTime();
+              return isRepeating ? true : (targetTime >= thresholdTime);
+          });
           if (cleaned.planner.length !== len) hasDeletions = true;
         }
 
@@ -179,13 +191,15 @@ function App() {
           if (cleaned.exams.length !== len) hasDeletions = true;
         }
 
-        if (cleaned.finance && cleaned.finance.transactions) {
-          const len = cleaned.finance.transactions.length;
-          const keptTx = cleaned.finance.transactions.filter(t => new Date(t.date).getTime() >= thresholdTime);
-          if (keptTx.length !== len) {
-            cleaned.finance = { ...cleaned.finance, transactions: keptTx };
-            hasDeletions = true;
-          }
+        if (cleaned.finance) {
+            if (cleaned.finance.transactions) {
+              const len = cleaned.finance.transactions.length;
+              const keptTx = cleaned.finance.transactions.filter(t => new Date(t.date).getTime() >= thresholdTime);
+              if (keptTx.length !== len) {
+                cleaned.finance = { ...cleaned.finance, transactions: keptTx };
+                hasDeletions = true;
+              }
+            }
         }
 
         const cleanLogs = (logsObj) => {
@@ -193,8 +207,11 @@ function App() {
           let changed = false;
           const newLogs = {};
           for (const [dateStr, val] of Object.entries(logsObj)) {
-            if (dateStr >= thresholdDateStr) newLogs[dateStr] = val;
-            else changed = true;
+            if (dateStr >= thresholdDateStr) {
+                newLogs[dateStr] = val;
+            } else {
+                changed = true;
+            }
           }
           return { newLogs, changed };
         };
@@ -253,45 +270,67 @@ function App() {
   };
 
   useEffect(() => {
-    if (user && !isDataLoading && Object.keys(habitLogs).length > 0) {
-      if (JSON.stringify(habitLogs) !== JSON.stringify(cloudData.habitLogs)) updateCloudData('habitLogs', habitLogs);
+    if (user) {
+        if (!isDataLoading) {
+            if (Object.keys(habitLogs).length > 0) {
+              if (JSON.stringify(habitLogs) !== JSON.stringify(cloudData.habitLogs)) updateCloudData('habitLogs', habitLogs);
+            }
+        }
     }
   }, [habitLogs, user, isDataLoading, cloudData.habitLogs]);
 
   useEffect(() => {
-    if (user && !isDataLoading && habits.length > 0) {
-      if (JSON.stringify(habits) !== JSON.stringify(cloudData.habits)) updateCloudData('habits', habits);
+    if (user) {
+        if (!isDataLoading) {
+            if (habits.length > 0) {
+              if (JSON.stringify(habits) !== JSON.stringify(cloudData.habits)) updateCloudData('habits', habits);
+            }
+        }
     }
   }, [habits, user, isDataLoading, cloudData.habits]);
 
   useEffect(() => {
-    if (user && !isDataLoading && Object.keys(focusLogs).length > 0) {
-      if (JSON.stringify(focusLogs) !== JSON.stringify(cloudData.focusLogs)) updateCloudData('focusLogs', focusLogs);
+    if (user) {
+        if (!isDataLoading) {
+            if (Object.keys(focusLogs).length > 0) {
+              if (JSON.stringify(focusLogs) !== JSON.stringify(cloudData.focusLogs)) updateCloudData('focusLogs', focusLogs);
+            }
+        }
     }
   }, [focusLogs, user, isDataLoading, cloudData.focusLogs]);
 
   useEffect(() => {
-    if (user && !isDataLoading && focusSubjects.length > 0) {
-      if (JSON.stringify(focusSubjects) !== JSON.stringify(cloudData.focusSubjects)) updateCloudData('focusSubjects', focusSubjects);
+    if (user) {
+        if (!isDataLoading) {
+            if (focusSubjects.length > 0) {
+              if (JSON.stringify(focusSubjects) !== JSON.stringify(cloudData.focusSubjects)) updateCloudData('focusSubjects', focusSubjects);
+            }
+        }
     }
   }, [focusSubjects, user, isDataLoading, cloudData.focusSubjects]);
 
   useEffect(() => {
-    if (user && !isDataLoading && spotifyEmbed) {
-      if (spotifyEmbed !== cloudData.spotifyEmbed) updateCloudData('spotifyEmbed', spotifyEmbed);
+    if (user) {
+        if (!isDataLoading) {
+            if (spotifyEmbed) {
+              if (spotifyEmbed !== cloudData.spotifyEmbed) updateCloudData('spotifyEmbed', spotifyEmbed);
+            }
+        }
     }
   }, [spotifyEmbed, user, isDataLoading, cloudData.spotifyEmbed]);
 
   useEffect(() => {
-    if (isSettingsOpen && user) {
-      const fetchDevices = async () => {
-        setIsLoadingDevices(true);
-        const userRef = doc(db, 'users', user.uid);
-        const snap = await getDoc(userRef);
-        if (snap.exists()) setRegisteredDevices(snap.data().registeredDevices || []);
-        setIsLoadingDevices(false);
-      };
-      fetchDevices();
+    if (isSettingsOpen) {
+        if (user) {
+          const fetchDevices = async () => {
+            setIsLoadingDevices(true);
+            const userRef = doc(db, 'users', user.uid);
+            const snap = await getDoc(userRef);
+            if (snap.exists()) setRegisteredDevices(snap.data().registeredDevices ? snap.data().registeredDevices : []);
+            setIsLoadingDevices(false);
+          };
+          fetchDevices();
+        }
     }
   }, [isSettingsOpen, user]);
 
@@ -307,7 +346,7 @@ function App() {
     const d = new Date(nowForStreak);
     d.setDate(d.getDate() - i);
     const dateStr = getLocalDateStr(d);
-    const logs = habitLogs[dateStr] || {};
+    const logs = habitLogs[dateStr] ? habitLogs[dateStr] : {};
     const completed = Object.values(logs).filter(Boolean).length;
     const pct = habits.length > 0 ? Math.round((completed / habits.length) * 100) : 0;
     if (pct >= 75) { currentStreak++; } 
@@ -325,7 +364,7 @@ function App() {
   const overviewCategories = last7Days.map(dStr => new Date(dStr).toLocaleDateString('en-US', {weekday: 'short'}));
 
   const overviewSeriesData = last7Days.map(dStr => {
-    const logs = habitLogs[dStr] || {};
+    const logs = habitLogs[dStr] ? habitLogs[dStr] : {};
     const c = Object.values(logs).filter(Boolean).length;
     return habits.length > 0 ? Math.round((c / habits.length) * 100) : 0;
   });
@@ -333,14 +372,17 @@ function App() {
   const overviewOptions = { chart: { type: 'area', toolbar: { show: false }, background: 'transparent' }, colors: ['#10b981'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 90, 100] } }, dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 2 }, xaxis: { categories: overviewCategories, axisBorder: { show: false }, axisTicks: { show: false }, labels: { style: { colors: '#6b7280' } } }, yaxis: { show: false, min: 0, max: 100 }, grid: { show: false }, theme: { mode: 'dark' } };
   const overviewSeries = [{ name: 'Completion %', data: overviewSeriesData }];
 
-  // --- DYNAMIC STACKED SUBJECT GRAPH LOGIC ---
   const allFocusSubjects = new Set();
   last7Days.forEach(dStr => {
     const log = focusLogs[dStr];
-    if (typeof log === 'object' && log !== null) {
-      Object.keys(log).forEach(k => { if (k !== 'total') allFocusSubjects.add(k); });
-    } else if (typeof log === 'number' && log > 0) {
-      allFocusSubjects.add('Uncategorized');
+    if (typeof log === 'object') {
+        if (log !== null) {
+          Object.keys(log).forEach(k => { if (k !== 'total') allFocusSubjects.add(k); });
+        }
+    } else if (typeof log === 'number') {
+        if (log > 0) {
+          allFocusSubjects.add('Uncategorized');
+        }
     }
   });
   
@@ -353,9 +395,11 @@ function App() {
       const log = focusLogs[dStr];
       if (!log) return 0;
       if (typeof log === 'number') {
-        return (subj === 'Uncategorized' || subj === 'Focus Time') ? Math.round(log / 60) : 0;
+        const isDefault = subj === 'Uncategorized' ? true : (subj === 'Focus Time' ? true : false);
+        return isDefault ? Math.round(log / 60) : 0;
       }
-      return Math.round((log[subj] || 0) / 60);
+      const val = log[subj] ? log[subj] : 0;
+      return Math.round(val / 60);
     })
   }));
 
@@ -378,13 +422,14 @@ function App() {
   const getLowAttendanceSubjects = () => {
     if (!cloudData.attendance) return { lowSubjects: [], threshold: 75 };
     
-    const attSchedules = cloudData.attendance.schedules || [];
-    const attRecords = cloudData.attendance.records || {};
-    const attThreshold = cloudData.attendance.threshold || 75;
+    const attSchedules = cloudData.attendance.schedules ? cloudData.attendance.schedules : [];
+    const attRecords = cloudData.attendance.records ? cloudData.attendance.records : {};
+    const attThreshold = cloudData.attendance.threshold ? cloudData.attendance.threshold : 75;
     const attStats = {};
     
     attSchedules.forEach(s => {
-      const key = `${s.subject} ${s.classType ? `(${s.classType})` : ''}`;
+      const keyStr = s.classType ? `(${s.classType})` : '';
+      const key = `${s.subject} ${keyStr}`;
       if (!attStats[key]) attStats[key] = { P: 0, total: 0 };
     });
     
@@ -396,7 +441,8 @@ function App() {
       const schedule = attSchedules.find(s => s.id === schedId);
       
       if (schedule) {
-        const key = `${schedule.subject} ${schedule.classType ? `(${schedule.classType})` : ''}`;
+        const keyStr = schedule.classType ? `(${schedule.classType})` : '';
+        const key = `${schedule.subject} ${keyStr}`;
         if (!attStats[key]) attStats[key] = { P: 0, total: 0 };
         attStats[key].total++;
         if (status === 'P') attStats[key].P++;
@@ -408,14 +454,17 @@ function App() {
         name,
         pct: stats.total === 0 ? 100 : Math.round((stats.P / stats.total) * 100)
       }))
-      .filter(s => s.pct < attThreshold && attStats[s.name]?.total > 0);
+      .filter(s => {
+          const isLow = s.pct < attThreshold;
+          const hasClasses = attStats[s.name] ? (attStats[s.name].total > 0 ? true : false) : false;
+          return isLow ? hasClasses : false;
+      });
       
     return { lowSubjects, threshold: attThreshold };
   };
   
   const attendanceAlertData = getLowAttendanceSubjects();
 
-  // --- UPDATED TIMER LOGIC FOR SUBJECT TRACKING ---
   const saveSessionToLogs = (timeToSaveInSeconds) => {
     if (timeToSaveInSeconds <= 0) return;
     setFocusLogs(prev => {
@@ -425,15 +474,20 @@ function App() {
       
       if (typeof prevLog === 'number') {
          newLog = { Uncategorized: prevLog, total: prevLog };
-      } else if (prevLog && typeof prevLog === 'object') {
-         newLog = { ...prevLog };
+      } else if (prevLog) {
+         if (typeof prevLog === 'object') {
+             newLog = { ...prevLog };
+         }
       } else {
          newLog = { total: 0 };
       }
 
-      const subjKey = selectedFocusSubject || 'Uncategorized';
-      newLog[subjKey] = (newLog[subjKey] || 0) + timeToSaveInSeconds;
-      newLog.total = (newLog.total || 0) + timeToSaveInSeconds;
+      const subjKey = selectedFocusSubject ? selectedFocusSubject : 'Uncategorized';
+      const currentSubjVal = newLog[subjKey] ? newLog[subjKey] : 0;
+      const currentTotalVal = newLog.total ? newLog.total : 0;
+
+      newLog[subjKey] = currentSubjVal + timeToSaveInSeconds;
+      newLog.total = currentTotalVal + timeToSaveInSeconds;
 
       return { ...prev, [today]: newLog };
     });
@@ -445,19 +499,26 @@ function App() {
     if (!("Notification" in window)) return;
     
     const taskInterval = setInterval(() => {
-      const currentTasks = cloudData.tasks || [];
+      const currentTasks = cloudData.tasks ? cloudData.tasks : [];
       const now = new Date();
       const todayStr = getLocalDateStr(now);
       const nowMins = (now.getHours() * 60) + now.getMinutes();
 
       currentTasks.forEach(task => {
-        if (task.completed || task.date !== todayStr || !task.time) return;
+        if (task.completed) return;
+        if (task.date !== todayStr) return;
+        if (!task.time) return;
+
         const [hrs, mins] = task.time.split(':').map(Number);
         const targetMins = (hrs * 60) + mins;
         const diffMins = targetMins - nowMins;
 
-        if (diffMins === 60 && Notification.permission === "granted") new Notification("Task Due in 1 Hour", { body: task.title });
-        else if (diffMins === 5 && Notification.permission === "granted") new Notification("Starting in 5 Mins", { body: task.title });
+        if (diffMins === 60) {
+            if (Notification.permission === "granted") new Notification("Task Due in 1 Hour", { body: task.title });
+        }
+        else if (diffMins === 5) {
+            if (Notification.permission === "granted") new Notification("Starting in 5 Mins", { body: task.title });
+        }
       });
     }, 60000); 
 
@@ -480,12 +541,41 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStudying]);
 
+  // --- NEW: BREAK ENGINE COUNTDOWN LISTENER ---
   useEffect(() => {
-    if (isStudying && focusMode === 'timer' && studyTime >= timerTarget * 60) {
-      setIsStudying(false);
-      saveSessionToLogs(studyTime);
-      setStudyTime(0);
-      setTimeout(() => alert("Target Reached! Focus session automatically saved to your daily graph."), 100);
+    let breakInterval = null;
+    if (isOnBreak) {
+      const targetEndMs = Date.now() + (600 * 1000); // 10 minutes from exactly now
+      
+      breakInterval = setInterval(() => {
+        const left = Math.ceil((targetEndMs - Date.now()) / 1000);
+        if (left <= 0) {
+          setBreakTimeLeft(0);
+          clearInterval(breakInterval);
+          if ("Notification" in window) {
+              if (Notification.permission === "granted") {
+                 new Notification("Break Over!", { body: "Time to resume your deep work session." });
+              }
+          }
+        } else {
+          setBreakTimeLeft(left);
+        }
+      }, 1000);
+    }
+    return () => clearInterval(breakInterval);
+  }, [isOnBreak]);
+
+  useEffect(() => {
+    if (isStudying) {
+        if (focusMode === 'timer') {
+            if (studyTime >= timerTarget * 60) {
+              setIsStudying(false);
+              saveSessionToLogs(studyTime);
+              setStudyTime(0);
+              setIsOnBreak(false);
+              setTimeout(() => alert("Target Reached! Focus session automatically saved to your daily graph."), 100);
+            }
+        }
     }
   }, [studyTime, isStudying, focusMode, timerTarget]);
 
@@ -520,7 +610,7 @@ function App() {
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
-          const devices = userSnap.data().registeredDevices || [];
+          const devices = userSnap.data().registeredDevices ? userSnap.data().registeredDevices : [];
           const updatedDevices = devices.filter(d => d.id !== deviceId);
           await updateDoc(userRef, { registeredDevices: updatedDevices });
         }
@@ -551,19 +641,28 @@ function App() {
   const toggleStudyTimer = () => setIsStudying(!isStudying);
   
   const handleResetTimer = () => {
-    if (studyTime === 0) return;
+    const isReadyToReset = studyTime === 0 ? (!isOnBreak ? true : false) : false;
+    if (isReadyToReset) return;
+
     if (window.confirm("Save your current minutes to the graph and reset the timer back to zero?")) {
       saveSessionToLogs(studyTime);
       setStudyTime(0);
       setIsStudying(false);
+      setIsOnBreak(false);
+      setBreakTimeLeft(0);
     }
   };
 
   const takeBreak = () => { 
-    saveSessionToLogs(studyTime);
-    setStudyTime(0);
     setIsStudying(false);
-    alert("Taking a 10 minute break! Your session was saved to the daily graph."); 
+    setBreakTimeLeft(600); // Set strictly to 10 mins
+    setIsOnBreak(true);
+  };
+
+  const resumeSession = () => {
+    setIsOnBreak(false);
+    setBreakTimeLeft(0);
+    setIsStudying(true);
   };
   
   const handleModeSwitch = (mode) => {
@@ -571,11 +670,17 @@ function App() {
     setFocusMode(mode);
     setStudyTime(0);
     setIsStudying(false);
+    setIsOnBreak(false);
+    setBreakTimeLeft(0);
   };
 
   const handleSpotifyLink = (e) => {
     let link = e.target.value;
-    if (link.includes('spotify.com') && !link.includes('/embed/')) link = link.replace('spotify.com/', 'spotify.com/embed/');
+    const hasSpotify = link.includes('spotify.com');
+    const hasEmbed = link.includes('/embed/');
+    if (hasSpotify) {
+        if (!hasEmbed) link = link.replace('spotify.com/', 'spotify.com/embed/');
+    }
     setSpotifyEmbed(link); 
   };
   
@@ -589,18 +694,29 @@ function App() {
 
   const displaySeconds = focusMode === 'stopwatch' ? studyTime : Math.max(0, (timerTarget * 60) - studyTime);
   const canTakeBreak = studyTime >= 1800; 
-  const todayLogs = habitLogs[getLocalDateStr()] || {};
+  const todayLogs = habitLogs[getLocalDateStr()] ? habitLogs[getLocalDateStr()] : {};
   const completedTodayCount = Object.values(todayLogs).filter(Boolean).length;
   const progressPercentage = habits.length > 0 ? Math.round((completedTodayCount / habits.length) * 100) : 0;
 
 
-  if (isCheckingAuth || (user && isDataLoading)) {
+  if (isCheckingAuth) {
     return (
       <div className="flex h-screen bg-black items-center justify-center font-sans flex-col">
         <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
         <p className="text-gray-400 text-sm font-bold tracking-widest uppercase animate-pulse">Syncing Master Cloud...</p>
       </div>
     );
+  }
+
+  if (user) {
+      if (isDataLoading) {
+        return (
+          <div className="flex h-screen bg-black items-center justify-center font-sans flex-col">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-gray-400 text-sm font-bold tracking-widest uppercase animate-pulse">Syncing Master Cloud...</p>
+          </div>
+        );
+      }
   }
 
   if (!user) {
@@ -613,11 +729,11 @@ function App() {
           <h1 className="text-2xl font-bold text-white mb-2">CampusOS Cloud</h1>
           <p className="text-gray-500 text-sm mb-6">{isLoginMode ? 'Enter your credentials to unlock.' : 'Create a new account.'}</p>
           
-          {authError && (
+          {authError ? (
             <div className="bg-red-900/30 border border-red-500/50 text-red-400 text-xs p-3 rounded-lg mb-4 text-left">
               ⚠️ {authError}
             </div>
-          )}
+          ) : null}
 
           <form onSubmit={handleAuthSubmit} className="space-y-4">
             <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-3 text-center focus:border-blue-500 outline-none" placeholder="Email Address" />
@@ -642,7 +758,7 @@ function App() {
       <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
 
       <main className="flex-1 p-4 md:p-10 overflow-y-auto print:p-0 print:overflow-visible">
-        {currentView === 'dashboard' && (
+        {currentView === 'dashboard' ? (
           <div className="space-y-8 animate-in fade-in duration-500">
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
@@ -668,7 +784,7 @@ function App() {
               </div>
             </header>
 
-            {attendanceAlertData.lowSubjects.length > 0 && (
+            {attendanceAlertData.lowSubjects.length > 0 ? (
               <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between shadow-lg gap-4 animate-pulse">
                  <div className="flex items-center gap-4">
                    <div className="bg-red-500/20 p-3 rounded-lg text-red-400 shrink-0">
@@ -682,17 +798,11 @@ function App() {
                    </div>
                  </div>
                  <button onClick={() => setCurrentView('attendance')} className="shrink-0 w-full md:w-auto bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2.5 rounded-lg transition-colors text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] border border-red-500 text-center">
-                   Fix Attendance Hub →
+                   Fix Attendance Hub ➡
                  </button>
               </div>
-            )}
+            ) : null}
 
-            {/* DEDICATED HORIZONTAL QUOTE ROW */}
-            <div className="w-full">
-              <MotivationalQuote />
-            </div>
-
-            {/* REBALANCED 3-COLUMN GRID */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start mb-6">
               <div className="col-span-1 bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg w-full h-full">
                  <h3 className="text-emerald-400 font-semibold text-sm uppercase tracking-wider mb-2">Weekly Productivity</h3>
@@ -711,9 +821,13 @@ function App() {
               </div>
             </div>
 
+            <div className="w-full">
+              <MotivationalQuote />
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-               <div className="bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg flex flex-col items-center justify-center text-center relative overflow-visible">
-                 {isStudying && <div className="absolute inset-0 bg-blue-900/10 animate-pulse border-2 border-blue-500/50 rounded-xl pointer-events-none"></div>}
+               <div className="bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg flex flex-col items-center justify-center text-center relative overflow-hidden">
+                 {isStudying ? <div className="absolute inset-0 bg-blue-900/10 animate-pulse border-2 border-blue-500/50 rounded-xl pointer-events-none"></div> : null}
                  
                  <div className="flex justify-between items-center w-full mb-5 z-10">
                    <h3 className="text-blue-400 font-bold text-sm uppercase tracking-wider">Deep Work</h3>
@@ -723,7 +837,6 @@ function App() {
                    </div>
                  </div>
 
-                 {/* --- NEW: FOCUS SUBJECT TRACKER --- */}
                  <div className="w-full mb-6 z-10 flex flex-col items-center">
                     <div className="flex justify-between items-center w-full mb-1.5 px-4">
                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Subject Focus</label>
@@ -742,7 +855,7 @@ function App() {
                           ))}
                           <div className="flex gap-2 pt-2 border-t border-gray-800 mt-2">
                              <input type="text" value={newFocusSubject} onChange={e => setNewFocusSubject(e.target.value)} placeholder="New subject..." className="w-full bg-[#121212] border border-gray-700 text-white rounded-lg px-3 py-1.5 text-xs outline-none focus:border-blue-500 transition-colors" />
-                             <button onClick={() => { if(newFocusSubject && !focusSubjects.includes(newFocusSubject)) { setFocusSubjects([...focusSubjects, newFocusSubject]); setNewFocusSubject(''); } }} className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm transition-colors">+</button>
+                             <button onClick={() => { if(newFocusSubject) { if(!focusSubjects.includes(newFocusSubject)) { setFocusSubjects([...focusSubjects, newFocusSubject]); setNewFocusSubject(''); } } }} className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm transition-colors">+</button>
                           </div>
                        </div>
                     ) : (
@@ -753,23 +866,48 @@ function App() {
                     )}
                  </div>
 
-                 {focusMode === 'timer' && !isStudying && studyTime === 0 ? (
-                   <div className="mb-2 flex items-center z-10">
-                     <input type="number" min="1" max="300" value={timerTarget} onChange={(e) => setTimerTarget(Number(e.target.value))} className="bg-black border border-gray-700 text-white text-center rounded-lg px-2 py-1 w-16 text-lg font-bold focus:border-blue-500 outline-none" />
-                     <span className="text-gray-500 text-xs ml-2 font-bold uppercase">mins</span>
-                   </div>
-                 ) : ( <div className="mb-2 h-[36px]"></div> )}
+                 {focusMode === 'timer' ? (
+                     !isStudying ? (
+                         studyTime === 0 ? (
+                           <div className="mb-2 flex items-center z-10">
+                             <input type="number" min="1" max="300" value={timerTarget} onChange={(e) => setTimerTarget(Number(e.target.value))} className="bg-black border border-gray-700 text-white text-center rounded-lg px-2 py-1 w-16 text-lg font-bold focus:border-blue-500 outline-none" />
+                             <span className="text-gray-500 text-xs ml-2 font-bold uppercase">mins</span>
+                           </div>
+                         ) : <div className="mb-2 h-[36px]"></div>
+                     ) : <div className="mb-2 h-[36px]"></div>
+                 ) : <div className="mb-2 h-[36px]"></div>}
 
                  <div className="text-6xl font-black text-white font-mono mb-8 z-10 drop-shadow-md">{formatTimer(displaySeconds)}</div>
                  
                  <div className="flex gap-3 w-full px-4 z-10">
-                   <button onClick={toggleStudyTimer} className={`flex-1 py-3 rounded-xl font-bold text-white transition-colors shadow-lg ${isStudying ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'}`}>{isStudying ? 'Pause' : 'Start'}</button>
-                   
-                   <button onClick={handleResetTimer} className="flex-1 py-3 rounded-xl font-bold bg-red-900/30 text-red-500 hover:bg-red-500 hover:text-white border border-red-900/50 transition-colors shadow-lg">Reset</button>
-
-                   <button onClick={takeBreak} disabled={!canTakeBreak} className={`flex-1 py-3 rounded-xl font-bold transition-all ${canTakeBreak ? 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`}>Break</button>
+                   {!isOnBreak ? (
+                     <>
+                       <button onClick={toggleStudyTimer} className={`flex-1 py-3 rounded-xl font-bold text-white transition-colors shadow-lg ${isStudying ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'}`}>{isStudying ? 'Pause' : 'Start'}</button>
+                       <button onClick={handleResetTimer} className="flex-1 py-3 rounded-xl font-bold bg-red-900/30 text-red-500 hover:bg-red-500 hover:text-white border border-red-900/50 transition-colors shadow-lg">Reset</button>
+                       <button onClick={takeBreak} disabled={!canTakeBreak} className={`flex-1 py-3 rounded-xl font-bold transition-all ${canTakeBreak ? 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`}>Break</button>
+                     </>
+                   ) : (
+                     <>
+                       <button onClick={resumeSession} className="flex-1 py-3 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg transition-colors">
+                         {breakTimeLeft > 0 ? 'Resume Early' : 'Resume Session'}
+                       </button>
+                       <button onClick={handleResetTimer} className="flex-1 py-3 rounded-xl font-bold bg-red-900/30 text-red-500 hover:bg-red-500 hover:text-white border border-red-900/50 transition-colors shadow-lg">Reset & Save</button>
+                     </>
+                   )}
                  </div>
-                 {!canTakeBreak ? <p className="text-[10px] text-gray-500 mt-4 z-10">Break unlocks after 30 mins of active focus.</p> : <p className="text-[10px] text-emerald-500 font-bold mt-4 z-10">Break Unlocked!</p>}
+                 
+                 {!isOnBreak ? (
+                    !canTakeBreak ? <p className="text-[10px] text-gray-500 mt-4 z-10">Break unlocks after 30 mins of active focus.</p> : <p className="text-[10px] text-emerald-500 font-bold mt-4 z-10">Break Unlocked!</p>
+                 ) : null}
+
+                 {isOnBreak ? (
+                    <div className="absolute bottom-4 right-4 bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-2 z-20 animate-in slide-in-from-bottom-2">
+                       <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">Break</span>
+                       <span className={`font-mono font-bold text-sm ${breakTimeLeft === 0 ? 'text-red-400 animate-pulse' : 'text-emerald-400'}`}>
+                         {formatTimer(breakTimeLeft)}
+                       </span>
+                    </div>
+                 ) : null}
                </div>
 
                <div className="bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg flex flex-col justify-between">
@@ -790,30 +928,30 @@ function App() {
 
             <div className="grid grid-cols-1 gap-8 mt-8"><HabitHeatmap habitLogs={habitLogs} /></div>
           </div>
-        )}
+        ) : null}
 
-        {currentView === 'tasks' && <TaskManager cloudTasks={cloudData.tasks || []} updateCloudData={updateCloudData} />}
-        {currentView === 'planner' && <DailyPlanner cloudPlanner={cloudData.planner || []} updateCloudData={updateCloudData} />}
-        {currentView === 'habits' && <HabitTracker habits={habits} setHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} updateCloudData={updateCloudData} />}
-        {currentView === 'cgpa' && <CGPACalculator cloudCGPA={cloudData.cgpa || []} cloudSubjects={cloudData.subjects || []} updateCloudData={updateCloudData} />}        
-        {currentView === 'exams' && <ExamTracker cloudExams={cloudData.exams || []} cloudPlanner={cloudData.planner || []} cloudSubjects={cloudData.subjects || []} updateCloudData={updateCloudData} />}
-        {currentView === 'fitness' && <FitnessTracker cloudFitness={cloudData.fitness || {}} updateCloudData={updateCloudData} />}
-        {currentView === 'finance' && <FinanceTracker cloudFinance={cloudData.finance || {}} updateCloudData={updateCloudData} />}
-        {currentView === 'rewards' && <RewardSystem cloudRewards={cloudData.rewards || {}} updateCloudData={updateCloudData} habits={habits} />}
-        {currentView === 'library' && <Library cloudLibrary={cloudData.library || []} updateCloudData={updateCloudData} />}
-        {currentView === 'donate' && <AnimalDonation cloudDonations={cloudData.donations || []} updateCloudData={updateCloudData} />}
-        {currentView === 'subjects' && <Subjects cloudSubjects={cloudData.subjects || []} updateCloudData={updateCloudData} />}
-        {currentView === 'attendance' && <Attendance cloudAttendance={cloudData.attendance || {}} cloudSubjects={cloudData.subjects || []} updateCloudData={updateCloudData} />}
-        {currentView === 'bucketlist' && <BucketList cloudBucketList={cloudData.bucketList || []} updateCloudData={updateCloudData} />}
-        {currentView === 'laundry' && (
+        {currentView === 'tasks' ? <TaskManager cloudTasks={cloudData.tasks ? cloudData.tasks : []} updateCloudData={updateCloudData} /> : null}
+        {currentView === 'planner' ? <DailyPlanner cloudPlanner={cloudData.planner ? cloudData.planner : []} updateCloudData={updateCloudData} /> : null}
+        {currentView === 'habits' ? <HabitTracker habits={habits} setHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} updateCloudData={updateCloudData} /> : null}
+        {currentView === 'cgpa' ? <CGPACalculator cloudCGPA={cloudData.cgpa ? cloudData.cgpa : []} cloudSubjects={cloudData.subjects ? cloudData.subjects : []} updateCloudData={updateCloudData} /> : null}        
+        {currentView === 'exams' ? <ExamTracker cloudExams={cloudData.exams ? cloudData.exams : []} cloudPlanner={cloudData.planner ? cloudData.planner : []} cloudSubjects={cloudData.subjects ? cloudData.subjects : []} updateCloudData={updateCloudData} /> : null}
+        {currentView === 'fitness' ? <FitnessTracker cloudFitness={cloudData.fitness ? cloudData.fitness : {}} updateCloudData={updateCloudData} /> : null}
+        {currentView === 'finance' ? <FinanceTracker cloudFinance={cloudData.finance ? cloudData.finance : {}} updateCloudData={updateCloudData} /> : null}
+        {currentView === 'rewards' ? <RewardSystem cloudRewards={cloudData.rewards ? cloudData.rewards : {}} updateCloudData={updateCloudData} habits={habits} /> : null}
+        {currentView === 'library' ? <Library cloudLibrary={cloudData.library ? cloudData.library : []} updateCloudData={updateCloudData} /> : null}
+        {currentView === 'donate' ? <AnimalDonation cloudDonations={cloudData.donations ? cloudData.donations : []} updateCloudData={updateCloudData} /> : null}
+        {currentView === 'subjects' ? <Subjects cloudSubjects={cloudData.subjects ? cloudData.subjects : []} updateCloudData={updateCloudData} /> : null}
+        {currentView === 'attendance' ? <Attendance cloudAttendance={cloudData.attendance ? cloudData.attendance : {}} cloudSubjects={cloudData.subjects ? cloudData.subjects : []} updateCloudData={updateCloudData} /> : null}
+        {currentView === 'bucketlist' ? <BucketList cloudBucketList={cloudData.bucketList ? cloudData.bucketList : []} updateCloudData={updateCloudData} /> : null}
+        {currentView === 'laundry' ? (
           <div className="animate-in fade-in duration-500 h-full max-w-4xl mx-auto">
              <header className="mb-8"><h2 className="text-3xl font-bold text-white">Hostel Laundry Centre</h2></header>
-            <LaundryTracker cloudLaundry={cloudData.laundry || {}} updateCloudData={updateCloudData} />
+            <LaundryTracker cloudLaundry={cloudData.laundry ? cloudData.laundry : {}} updateCloudData={updateCloudData} />
           </div>
-        )}
+        ) : null}
       </main>
 
-      {isSettingsOpen && (
+      {isSettingsOpen ? (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#121212] border border-gray-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             
@@ -842,7 +980,7 @@ function App() {
                   <div className="flex justify-center p-4"><div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div></div>
                 ) : (
                   <div className="space-y-3">
-                    {registeredDevices.length === 0 && <p className="text-gray-500 text-sm italic">No devices found.</p>}
+                    {registeredDevices.length === 0 ? <p className="text-gray-500 text-sm italic">No devices found.</p> : null}
                     
                     {registeredDevices.map(device => {
                       const isCurrent = device.id === currentDeviceId;
@@ -858,7 +996,7 @@ function App() {
                             </div>
                             <div>
                               <p className="text-white font-semibold text-sm flex items-center gap-2">
-                                {device.type} {isCurrent && <span className="text-[10px] bg-indigo-500 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">This Device</span>}
+                                {device.type} {isCurrent ? <span className="text-[10px] bg-indigo-500 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">This Device</span> : null}
                               </p>
                               <p className="text-xs text-gray-500">Added: {new Date(device.addedAt).toLocaleDateString()}</p>
                             </div>
@@ -892,7 +1030,7 @@ function App() {
             
           </div>
         </div>
-      )}
+      ) : null}
 
     </div>
   );
