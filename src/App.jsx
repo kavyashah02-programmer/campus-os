@@ -47,7 +47,7 @@ const enforceDeviceLimit = async (user) => {
   }
 
   const userData = userSnap.data();
-  const devices = userData.registeredDevices ? userData.registeredDevices : [];
+  const devices = userData.registeredDevices || [];
 
   const isAlreadyRegistered = devices.find(d => d.id === deviceId);
   if (isAlreadyRegistered) return { allowed: true }; 
@@ -87,11 +87,6 @@ function App() {
   const [timerTarget, setTimerTarget] = useState(45); 
   const [studyTime, setStudyTime] = useState(0); 
   const [isStudying, setIsStudying] = useState(false);
-  
-  // --- NEW BREAK SYSTEM STATE ---
-  const [isOnBreak, setIsOnBreak] = useState(false);
-  const [breakTimeLeft, setBreakTimeLeft] = useState(0);
-
   const timerStartRef = useRef(null);
   const [spotifyEmbed, setSpotifyEmbed] = useState('https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?theme=0');
 
@@ -105,6 +100,21 @@ function App() {
   const [selectedFocusSubject, setSelectedFocusSubject] = useState('');
   const [isManagingFocusSubjects, setIsManagingFocusSubjects] = useState(false);
   const [newFocusSubject, setNewFocusSubject] = useState('');
+
+  // --- BREAK TRACKER STATE ---
+  const [isOnBreak, setIsOnBreak] = useState(false);
+  const [breakTimeLeft, setBreakTimeLeft] = useState(0);
+  const [currentBreakSessionTime, setCurrentBreakSessionTime] = useState(0);
+  const [lastBreakTime, setLastBreakTime] = useState(0);
+
+  const [breakLogs, setBreakLogs] = useState(() => {
+    try {
+      const saved = localStorage.getItem('breakTracker_logsData');
+      if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    return {};
+  });
+  useEffect(() => localStorage.setItem('breakTracker_logsData', JSON.stringify(breakLogs)), [breakLogs]);
 
   const [habits, setHabits] = useState(() => {
     try {
@@ -527,43 +537,42 @@ function App() {
 
   useEffect(() => {
     let timerInterval = null;
-    
     if (isStudying) {
       timerStartRef.current = Date.now() - (studyTime * 1000);
-      
       timerInterval = setInterval(() => {
         const exactSeconds = Math.floor((Date.now() - timerStartRef.current) / 1000);
         setStudyTime(exactSeconds);
       }, 1000);
     }
-    
     return () => clearInterval(timerInterval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStudying]);
+  }, [isStudying, studyTime]);
 
-  // --- NEW: BREAK ENGINE COUNTDOWN LISTENER ---
+  // --- UPDATED: BREAK ENGINE COUNTDOWN LISTENER ---
   useEffect(() => {
     let breakInterval = null;
     if (isOnBreak) {
-      const targetEndMs = Date.now() + (600 * 1000); // 10 minutes from exactly now
+      const breakStartTime = Date.now() - (currentBreakSessionTime * 1000);
       
       breakInterval = setInterval(() => {
-        const left = Math.ceil((targetEndMs - Date.now()) / 1000);
-        if (left <= 0) {
-          setBreakTimeLeft(0);
-          clearInterval(breakInterval);
-          if ("Notification" in window) {
-              if (Notification.permission === "granted") {
-                 new Notification("Break Over!", { body: "Time to resume your deep work session." });
-              }
-          }
-        } else {
-          setBreakTimeLeft(left);
+        const exactElapsed = Math.floor((Date.now() - breakStartTime) / 1000);
+        setCurrentBreakSessionTime(exactElapsed);
+        
+        const left = Math.max(0, 600 - exactElapsed);
+        setBreakTimeLeft(left);
+        
+        if (left === 0) {
+           if (breakTimeLeft !== 0) {
+               if ("Notification" in window) {
+                   if (Notification.permission === "granted") {
+                       new Notification("Break Over!", { body: "Time to resume your deep work session." });
+                   }
+               }
+           }
         }
       }, 1000);
     }
     return () => clearInterval(breakInterval);
-  }, [isOnBreak]);
+  }, [isOnBreak, currentBreakSessionTime, breakTimeLeft]);
 
   useEffect(() => {
     if (isStudying) {
@@ -573,12 +582,12 @@ function App() {
               saveSessionToLogs(studyTime);
               setStudyTime(0);
               setIsOnBreak(false);
+              setBreakTimeLeft(0);
               setTimeout(() => alert("Target Reached! Focus session automatically saved to your daily graph."), 100);
             }
         }
     }
   }, [studyTime, isStudying, focusMode, timerTarget]);
-
 
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
@@ -645,22 +654,35 @@ function App() {
     if (isReadyToReset) return;
 
     if (window.confirm("Save your current minutes to the graph and reset the timer back to zero?")) {
+      if (isOnBreak) {
+         const today = getLocalDateStr();
+         const prevLog = breakLogs[today] ? breakLogs[today] : 0;
+         setBreakLogs(prev => ({ ...prev, [today]: prevLog + currentBreakSessionTime }));
+      }
       saveSessionToLogs(studyTime);
       setStudyTime(0);
+      setLastBreakTime(0);
       setIsStudying(false);
       setIsOnBreak(false);
+      setCurrentBreakSessionTime(0);
       setBreakTimeLeft(0);
     }
   };
 
   const takeBreak = () => { 
     setIsStudying(false);
-    setBreakTimeLeft(600); // Set strictly to 10 mins
+    setBreakTimeLeft(600);
     setIsOnBreak(true);
+    setCurrentBreakSessionTime(0);
+    setLastBreakTime(studyTime);
   };
 
   const resumeSession = () => {
+    const today = getLocalDateStr();
+    const prevLog = breakLogs[today] ? breakLogs[today] : 0;
+    setBreakLogs(prev => ({ ...prev, [today]: prevLog + currentBreakSessionTime }));
     setIsOnBreak(false);
+    setCurrentBreakSessionTime(0);
     setBreakTimeLeft(0);
     setIsStudying(true);
   };
@@ -671,6 +693,7 @@ function App() {
     setStudyTime(0);
     setIsStudying(false);
     setIsOnBreak(false);
+    setCurrentBreakSessionTime(0);
     setBreakTimeLeft(0);
   };
 
@@ -693,7 +716,11 @@ function App() {
   };
 
   const displaySeconds = focusMode === 'stopwatch' ? studyTime : Math.max(0, (timerTarget * 60) - studyTime);
-  const canTakeBreak = studyTime >= 1800; 
+  const canTakeBreak = (studyTime - lastBreakTime) >= 1800; 
+
+  const todayLogsBreak = breakLogs[getLocalDateStr()] ? breakLogs[getLocalDateStr()] : 0;
+  const todayBreakTotal = todayLogsBreak + currentBreakSessionTime;
+
   const todayLogs = habitLogs[getLocalDateStr()] ? habitLogs[getLocalDateStr()] : {};
   const completedTodayCount = Object.values(todayLogs).filter(Boolean).length;
   const progressPercentage = habits.length > 0 ? Math.round((completedTodayCount / habits.length) * 100) : 0;
@@ -826,14 +853,18 @@ function App() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-               <div className="bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg flex flex-col items-center justify-center text-center relative overflow-hidden">
+               
+               {/* --- UPGRADED DEEP WORK MODULE --- */}
+               <div className="bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg flex flex-col items-center justify-center text-center relative overflow-visible">
+                 
                  {isStudying ? <div className="absolute inset-0 bg-blue-900/10 animate-pulse border-2 border-blue-500/50 rounded-xl pointer-events-none"></div> : null}
+                 {isOnBreak ? <div className="absolute inset-0 bg-amber-900/10 animate-pulse border-2 border-amber-500/50 rounded-xl pointer-events-none"></div> : null}
                  
                  <div className="flex justify-between items-center w-full mb-5 z-10">
                    <h3 className="text-blue-400 font-bold text-sm uppercase tracking-wider">Deep Work</h3>
                    <div className="flex bg-black p-1 rounded-lg border border-gray-800">
-                     <button onClick={() => handleModeSwitch('stopwatch')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-colors ${focusMode === 'stopwatch' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Stopwatch</button>
-                     <button onClick={() => handleModeSwitch('timer')} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-colors ${focusMode === 'timer' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>Timer</button>
+                     <button onClick={() => handleModeSwitch('stopwatch')} disabled={isOnBreak} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-colors ${focusMode === 'stopwatch' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'} disabled:opacity-50`}>Stopwatch</button>
+                     <button onClick={() => handleModeSwitch('timer')} disabled={isOnBreak} className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-colors ${focusMode === 'timer' ? 'bg-blue-500/20 text-blue-400' : 'text-gray-500 hover:text-gray-300'} disabled:opacity-50`}>Timer</button>
                    </div>
                  </div>
 
@@ -866,18 +897,29 @@ function App() {
                     )}
                  </div>
 
-                 {focusMode === 'timer' ? (
-                     !isStudying ? (
-                         studyTime === 0 ? (
-                           <div className="mb-2 flex items-center z-10">
-                             <input type="number" min="1" max="300" value={timerTarget} onChange={(e) => setTimerTarget(Number(e.target.value))} className="bg-black border border-gray-700 text-white text-center rounded-lg px-2 py-1 w-16 text-lg font-bold focus:border-blue-500 outline-none" />
-                             <span className="text-gray-500 text-xs ml-2 font-bold uppercase">mins</span>
-                           </div>
+                 {isOnBreak ? (
+                   <div className="mb-8 z-10 flex flex-col items-center">
+                     <div className={`text-6xl font-black font-mono drop-shadow-md transition-colors ${breakTimeLeft === 0 ? 'text-red-500 animate-pulse' : 'text-amber-500'}`}>
+                       {formatTimer(breakTimeLeft)}
+                     </div>
+                     <p className="text-[10px] font-bold text-gray-500 mt-2 uppercase tracking-widest">Break Time Remaining</p>
+                   </div>
+                 ) : (
+                   <>
+                     {focusMode === 'timer' ? (
+                         !isStudying ? (
+                             studyTime === 0 ? (
+                               <div className="mb-2 flex items-center z-10">
+                                 <input type="number" min="1" max="300" value={timerTarget} onChange={(e) => setTimerTarget(Number(e.target.value))} className="bg-black border border-gray-700 text-white text-center rounded-lg px-2 py-1 w-16 text-lg font-bold focus:border-blue-500 outline-none" />
+                                 <span className="text-gray-500 text-xs ml-2 font-bold uppercase">mins</span>
+                               </div>
+                             ) : <div className="mb-2 h-[36px]"></div>
                          ) : <div className="mb-2 h-[36px]"></div>
-                     ) : <div className="mb-2 h-[36px]"></div>
-                 ) : <div className="mb-2 h-[36px]"></div>}
+                     ) : <div className="mb-2 h-[36px]"></div>}
 
-                 <div className="text-6xl font-black text-white font-mono mb-8 z-10 drop-shadow-md">{formatTimer(displaySeconds)}</div>
+                     <div className="text-6xl font-black text-white font-mono mb-8 z-10 drop-shadow-md">{formatTimer(displaySeconds)}</div>
+                   </>
+                 )}
                  
                  <div className="flex gap-3 w-full px-4 z-10">
                    {!isOnBreak ? (
@@ -902,9 +944,9 @@ function App() {
 
                  {isOnBreak ? (
                     <div className="absolute bottom-4 right-4 bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-2 z-20 animate-in slide-in-from-bottom-2">
-                       <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">Break</span>
-                       <span className={`font-mono font-bold text-sm ${breakTimeLeft === 0 ? 'text-red-400 animate-pulse' : 'text-emerald-400'}`}>
-                         {formatTimer(breakTimeLeft)}
+                       <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">Total Break Today</span>
+                       <span className="font-mono font-bold text-sm text-gray-300">
+                         {formatTimer(todayBreakTotal)}
                        </span>
                     </div>
                  ) : null}
