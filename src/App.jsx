@@ -547,7 +547,6 @@ function App() {
     return () => clearInterval(timerInterval);
   }, [isStudying, studyTime]);
 
-  // --- UPDATED: BREAK ENGINE COUNTDOWN LISTENER ---
   useEffect(() => {
     let breakInterval = null;
     if (isOnBreak) {
@@ -854,7 +853,6 @@ function App() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
                
-               {/* --- UPGRADED DEEP WORK MODULE --- */}
                <div className="bg-[#121212] rounded-xl p-6 border border-gray-800 shadow-lg flex flex-col items-center justify-center text-center relative overflow-visible">
                  
                  {isStudying ? <div className="absolute inset-0 bg-blue-900/10 animate-pulse border-2 border-blue-500/50 rounded-xl pointer-events-none"></div> : null}
@@ -972,25 +970,36 @@ function App() {
           </div>
         ) : null}
 
-        {currentView === 'tasks' ? <TaskManager cloudTasks={cloudData.tasks ? cloudData.tasks : []} updateCloudData={updateCloudData} /> : null}
-        {currentView === 'planner' ? <DailyPlanner cloudPlanner={cloudData.planner ? cloudData.planner : []} updateCloudData={updateCloudData} /> : null}
-        {currentView === 'habits' ? <HabitTracker habits={habits} setHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} updateCloudData={updateCloudData} /> : null}
-        {currentView === 'cgpa' ? <CGPACalculator cloudCGPA={cloudData.cgpa ? cloudData.cgpa : []} cloudSubjects={cloudData.subjects ? cloudData.subjects : []} updateCloudData={updateCloudData} /> : null}        
-        {currentView === 'exams' ? <ExamTracker cloudExams={cloudData.exams ? cloudData.exams : []} cloudPlanner={cloudData.planner ? cloudData.planner : []} cloudSubjects={cloudData.subjects ? cloudData.subjects : []} updateCloudData={updateCloudData} /> : null}
-        {currentView === 'fitness' ? <FitnessTracker cloudFitness={cloudData.fitness ? cloudData.fitness : {}} updateCloudData={updateCloudData} /> : null}
-        {currentView === 'finance' ? <FinanceTracker cloudFinance={cloudData.finance ? cloudData.finance : {}} updateCloudData={updateCloudData} /> : null}
-        {currentView === 'rewards' ? <RewardSystem cloudRewards={cloudData.rewards ? cloudData.rewards : {}} updateCloudData={updateCloudData} habits={habits} /> : null}
-        {currentView === 'library' ? <Library cloudLibrary={cloudData.library ? cloudData.library : []} updateCloudData={updateCloudData} /> : null}
-        {currentView === 'donate' ? <AnimalDonation cloudDonations={cloudData.donations ? cloudData.donations : []} updateCloudData={updateCloudData} /> : null}
-        {currentView === 'subjects' ? <Subjects cloudSubjects={cloudData.subjects ? cloudData.subjects : []} updateCloudData={updateCloudData} /> : null}
-        {currentView === 'attendance' ? <Attendance cloudAttendance={cloudData.attendance ? cloudData.attendance : {}} cloudSubjects={cloudData.subjects ? cloudData.subjects : []} updateCloudData={updateCloudData} /> : null}
-        {currentView === 'bucketlist' ? <BucketList cloudBucketList={cloudData.bucketList ? cloudData.bucketList : []} updateCloudData={updateCloudData} /> : null}
-        {currentView === 'laundry' ? (
-          <div className="animate-in fade-in duration-500 h-full max-w-4xl mx-auto">
-             <header className="mb-8"><h2 className="text-3xl font-bold text-white">Hostel Laundry Centre</h2></header>
-            <LaundryTracker cloudLaundry={cloudData.laundry ? cloudData.laundry : {}} updateCloudData={updateCloudData} />
-          </div>
-        ) : null}
+        {/* --- CLOUD HYDRATED COMPONENTS --- */}
+        {(() => {
+           const activeSem = cloudData.activeSemester ? cloudData.activeSemester : 'Semester 1';
+           const allSubjects = cloudData.subjects ? cloudData.subjects : [];
+           const currentSemSubjects = allSubjects.filter(s => !s.semester || s.semester === activeSem);
+
+           return (
+             <>
+                {currentView === 'tasks' ? <TaskManager cloudTasks={cloudData.tasks ? cloudData.tasks : []} updateCloudData={updateCloudData} /> : null}
+                {currentView === 'planner' ? <DailyPlanner cloudPlanner={cloudData.planner ? cloudData.planner : []} updateCloudData={updateCloudData} /> : null}
+                {currentView === 'habits' ? <HabitTracker habits={habits} setHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} updateCloudData={updateCloudData} /> : null}
+                {currentView === 'cgpa' ? <CGPACalculator cloudCGPA={cloudData.cgpa ? cloudData.cgpa : []} cloudSubjects={currentSemSubjects} updateCloudData={updateCloudData} /> : null}        
+                {currentView === 'exams' ? <ExamTracker cloudExams={cloudData.exams ? cloudData.exams : []} cloudPlanner={cloudData.planner ? cloudData.planner : []} cloudSubjects={currentSemSubjects} updateCloudData={updateCloudData} /> : null}
+                {currentView === 'fitness' ? <FitnessTracker cloudFitness={cloudData.fitness ? cloudData.fitness : {}} updateCloudData={updateCloudData} /> : null}
+                {currentView === 'finance' ? <FinanceTracker cloudFinance={cloudData.finance ? cloudData.finance : {}} updateCloudData={updateCloudData} /> : null}
+                {currentView === 'rewards' ? <RewardSystem cloudRewards={cloudData.rewards ? cloudData.rewards : {}} updateCloudData={updateCloudData} habits={habits} /> : null}
+                {currentView === 'library' ? <Library cloudLibrary={cloudData.library ? cloudData.library : []} updateCloudData={updateCloudData} /> : null}
+                {currentView === 'donate' ? <AnimalDonation cloudDonations={cloudData.donations ? cloudData.donations : []} updateCloudData={updateCloudData} /> : null}
+                {currentView === 'subjects' ? <Subjects cloudSubjects={allSubjects} cloudActiveSemester={activeSem} updateCloudData={updateCloudData} /> : null}
+                {currentView === 'attendance' ? <Attendance cloudAttendance={cloudData.attendance ? cloudData.attendance : {}} cloudSubjects={currentSemSubjects} updateCloudData={updateCloudData} /> : null}
+                {currentView === 'bucketlist' ? <BucketList cloudBucketList={cloudData.bucketList ? cloudData.bucketList : []} updateCloudData={updateCloudData} /> : null}
+                {currentView === 'laundry' ? (
+                  <div className="animate-in fade-in duration-500 h-full max-w-4xl mx-auto">
+                     <header className="mb-8"><h2 className="text-3xl font-bold text-white">Hostel Laundry Centre</h2></header>
+                    <LaundryTracker cloudLaundry={cloudData.laundry ? cloudData.laundry : {}} updateCloudData={updateCloudData} />
+                  </div>
+                ) : null}
+             </>
+           );
+        })()}
       </main>
 
       {isSettingsOpen ? (
