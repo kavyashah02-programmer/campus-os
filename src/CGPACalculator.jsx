@@ -1,205 +1,172 @@
-import React, { useState, useEffect } from 'react'; 
-import { useLocalStorageSync } from './useLocalStorageSync';
+import React, { useState, useEffect } from 'react';
+import { useLocalStorageSync } from './useLocalStorageSync'; 
 
-const CGPACalculator = ({ cloudCGPA = [], cloudSubjects = [], updateCloudData }) => {
-  const safeCloudCGPA = Array.isArray(cloudCGPA) ? cloudCGPA : [];
-  const [courses, setCourses] = useLocalStorageSync('cgpaCalculatorData', safeCloudCGPA);
-  const [subjects] = useLocalStorageSync('subjectsData', cloudSubjects); // Pull in the master list
+const GRADE_POINTS = { 'A': 10, 'A-': 9, 'B': 8, 'B-': 7, 'C': 6, 'C-': 5, 'D': 4, 'E': 2, 'NC': 0 };
+
+const CGPACalculator = ({ cloudCGPA = [], cloudSubjects = [], activeSemester = 'Semester 1', updateCloudData }) => {
+  const [records, setRecords] = useLocalStorageSync('cgpaData', cloudCGPA);
 
   useEffect(() => {
-    if (Array.isArray(cloudCGPA)) setCourses(cloudCGPA); 
-  }, [cloudCGPA, setCourses]);
+    if (cloudCGPA && cloudCGPA.length > 0) setRecords(cloudCGPA);
+  }, [cloudCGPA, setRecords]);
 
-  const safeSubjects = Array.isArray(subjects) ? subjects : [];
-  const safeCourses = Array.isArray(courses) ? courses : [];
+  const safeRecords = Array.isArray(records) ? records : [];
+  const safeSubjects = Array.isArray(cloudSubjects) ? cloudSubjects : [];
 
-  const [editingId, setEditingId] = useState(null);
-  const [newName, setNewName] = useState('');
-  const [newCredits, setNewCredits] = useState('');
-  const [newGrade, setNewGrade] = useState('A');
-  const [newSemester, setNewSemester] = useState('Semester 1'); 
+  const [subject, setSubject] = useState('');
+  const [credits, setCredits] = useState(3);
+  const [grade, setGrade] = useState('A');
 
-  const gradeScale = { 'A': 10, 'A-': 9, 'B': 8, 'B-': 7, 'C': 6, 'C-': 5, 'D': 4, 'E': 2 };
-  const semesterOptions = Array.from({ length: 10 }, (_, i) => `Semester ${i + 1}`);
-
-  const handleSave = (e) => {
+  const handleAddRecord = (e) => {
     e.preventDefault();
-    if (!newName || !newCredits) return;
+    if (!subject) return;
+
+    const newRecord = {
+      id: Date.now().toString(),
+      subject,
+      credits: Number(credits),
+      grade,
+      semester: activeSemester
+    };
+
+    const updated = [...safeRecords, newRecord];
+    setRecords(updated);
+    if (updateCloudData) updateCloudData('cgpa', updated);
     
-    const courseData = { id: editingId || Date.now(), name: newName, credits: Number(newCredits), grade: newGrade, semester: newSemester };
-    
-    let updatedCourses;
-    if (editingId) {
-      updatedCourses = safeCourses.map(c => c.id === editingId ? courseData : c);
-      setEditingId(null);
-    } else {
-      updatedCourses = [...safeCourses, courseData];
+    setSubject('');
+  };
+
+  const handleDelete = (id) => {
+    if (window.confirm("Delete this grade record?")) {
+      const updated = safeRecords.filter(r => r.id !== id);
+      setRecords(updated);
+      if (updateCloudData) updateCloudData('cgpa', updated);
     }
-    
-    setCourses(updatedCourses);
-    if (updateCloudData) updateCloudData('cgpa', updatedCourses);
-
-    setNewName(''); setNewCredits(''); setNewGrade('A');
   };
 
-  const handleEdit = (id) => {
-    const c = safeCourses.find(x => x.id === id);
-    if (!c) return;
-    setEditingId(c.id); setNewName(c.name); setNewCredits(c.credits); setNewGrade(c.grade); setNewSemester(c.semester || 'Semester 1');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  const calculateGPA = (courses) => {
+    if (courses.length === 0) return 0;
+    let totalPoints = 0;
+    let totalCredits = 0;
+    courses.forEach(c => {
+      totalPoints += c.credits * GRADE_POINTS[c.grade];
+      totalCredits += c.credits;
+    });
+    return totalCredits === 0 ? 0 : (totalPoints / totalCredits).toFixed(2);
   };
 
-  const deleteCourse = (id) => {
-    const updatedCourses = safeCourses.filter(c => c.id !== id);
-    setCourses(updatedCourses);
-    if (updateCloudData) updateCloudData('cgpa', updatedCourses);
-  };
+  const cgpa = calculateGPA(safeRecords);
   
-  const cancelEdit = () => { 
-    setEditingId(null); setNewName(''); setNewCredits(''); setNewGrade('A'); setNewSemester('Semester 1'); 
-  };
+  // FIX: Force legacy records into Semester 1 for SGPA
+  const currentSemesterRecords = safeRecords.filter(r => (r.semester ? r.semester : 'Semester 1') === activeSemester);
+  const sgpa = calculateGPA(currentSemesterRecords);
 
-  const calculateGPA = (courseList) => {
-    if (!courseList || courseList.length === 0) return { credits: 0, points: 0, gpa: "0.00" };
-    const credits = courseList.reduce((sum, c) => sum + (Number(c.credits) || 0), 0);
-    const points = courseList.reduce((sum, c) => sum + ((Number(c.credits) || 0) * (gradeScale[c.grade] || 0)), 0);
-    const gpa = credits === 0 ? "0.00" : (points / credits).toFixed(2);
-    return { credits, points, gpa };
-  };
-
-  const overall = calculateGPA(safeCourses);
-
-  const coursesBySemester = safeCourses.reduce((acc, course) => {
-    const sem = course.semester || 'Semester 1';
+  // FIX: Force legacy records into Semester 1 for Transcript Grouping
+  const groupedRecords = safeRecords.reduce((acc, curr) => {
+    const sem = curr.semester ? curr.semester : 'Semester 1';
     if (!acc[sem]) acc[sem] = [];
-    acc[sem].push(course);
+    acc[sem].push(curr);
     return acc;
   }, {});
 
-  const sortedSemesters = Object.keys(coursesBySemester).sort((a, b) => {
-    return (parseInt(a.replace(/\D/g, '')) || 0) - (parseInt(b.replace(/\D/g, '')) || 0);
-  });
-
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-500 h-full flex flex-col">
+    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 h-full flex flex-col pb-10">
       <header className="bg-[#121212] rounded-2xl border border-gray-800 p-5 shadow-lg flex justify-between items-center shrink-0">
         <div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight">CGPA Calculator</h1>
-          <p className="text-gray-400 text-sm mt-1">Total Credits: {overall.credits}</p>
+          <p className="text-gray-400 text-sm mt-0.5">Accurate BITS Pilani 10-point scale tracking.</p>
         </div>
-        <div className="bg-emerald-900/20 border border-emerald-900/50 px-6 py-3 rounded-xl text-center shadow-inner">
-          <p className="text-xs text-emerald-500 font-bold uppercase tracking-wider mb-1">Cumulative CGPA</p>
-          <p className="text-3xl font-black text-white">{overall.gpa}</p>
+        <div className="text-right">
+          <span className="text-[10px] bg-gray-900 border border-gray-800 text-gray-400 px-2 py-1 rounded uppercase tracking-wider font-bold">Active: {activeSemester}</span>
         </div>
       </header>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 shrink-0">
+        <div className="bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex flex-col items-center justify-center text-center">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Overall CGPA</p>
+          <div className={`text-6xl font-black font-mono drop-shadow-md ${cgpa >= 8.5 ? 'text-emerald-400' : cgpa >= 7.0 ? 'text-blue-400' : 'text-yellow-400'}`}>
+            {cgpa}
+          </div>
+          <p className="text-[10px] text-gray-500 mt-3">Calculated across ALL semesters</p>
+        </div>
+
+        <div className="bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex flex-col items-center justify-center text-center relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500"></div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Current SGPA ({activeSemester})</p>
+          <div className="text-5xl font-black text-white font-mono drop-shadow-md">
+            {sgpa}
+          </div>
+          <p className="text-[10px] text-gray-500 mt-3">Target: 8.5+</p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
-        
         <div className="lg:col-span-1 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg h-fit">
-          <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2 border-b border-gray-800 pb-3">
-            <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-            {editingId ? 'Edit Subject' : 'Add Subject'}
+          <h2 className="text-lg font-bold text-white mb-6 border-b border-gray-800 pb-3 flex items-center gap-2">
+            <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg> 
+            Log a Grade
           </h2>
-          <form onSubmit={handleSave} className="space-y-4">
+          <form onSubmit={handleAddRecord} className="space-y-4">
             <div>
-              <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Subject Name *</label>
-              {/* UPDATED: Dynamic Dropdown */}
-              <select required value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 outline-none transition-colors">
-                <option value="" disabled>Select Subject</option>
-                {safeSubjects.length === 0 && <option value="" disabled>⚠️ Go to Subjects module to add subjects</option>}
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Subject ({activeSemester})</label>
+              <select required value={subject} onChange={e => setSubject(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:border-yellow-500 outline-none transition-colors">
+                <option value="" disabled>Select Subject...</option>
+                {safeSubjects.length === 0 && <option value="" disabled>⚠️ Add subjects in Subjects module first</option>}
                 {safeSubjects.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
               </select>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Semester *</label>
-                <select value={newSemester} onChange={(e) => setNewSemester(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 outline-none transition-colors">
-                  {semesterOptions.map(sem => <option key={sem} value={sem}>{sem}</option>)}
-                </select>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Credits</label>
+                <input type="number" min="1" max="10" required value={credits} onChange={e => setCredits(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:border-yellow-500 outline-none text-center" />
               </div>
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Credits *</label>
-                <input type="number" required min="1" max="15" value={newCredits} onChange={(e) => setNewCredits(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 outline-none transition-colors" />
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Grade Earned</label>
+                <select value={grade} onChange={e => setGrade(e.target.value)} className="w-full bg-black border border-gray-700 text-yellow-400 font-bold rounded-xl px-4 py-3 text-sm focus:border-yellow-500 outline-none text-center">
+                  {Object.keys(GRADE_POINTS).map(g => <option key={g} value={g}>{g} ({GRADE_POINTS[g]})</option>)}
+                </select>
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Expected Grade *</label>
-              <select value={newGrade} onChange={(e) => setNewGrade(e.target.value)} className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-2.5 text-sm focus:border-emerald-500 outline-none transition-colors">
-                {Object.keys(gradeScale).map(grade => <option key={grade} value={grade}>{grade} ({gradeScale[grade]} pts)</option>)}
-              </select>
-            </div>
-            
-            <div className="pt-2 flex gap-2">
-              <button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors text-sm shadow-md">
-                {editingId ? 'Update Subject' : 'Add to Calculation'}
-              </button>
-              {editingId && (
-                <button type="button" onClick={cancelEdit} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-xl transition-colors text-sm">
-                  Cancel
-                </button>
-              )}
-            </div>
+            <button type="submit" className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-black py-3 rounded-xl shadow-[0_0_15px_rgba(202,138,4,0.3)] transition-colors mt-4">
+              Add to Transcript
+            </button>
           </form>
         </div>
 
-        <div className="lg:col-span-2 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex flex-col h-[75vh] overflow-hidden">
-          <div className="flex justify-between items-center mb-4 border-b border-gray-800 pb-3 shrink-0">
-            <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-              Academic Roster
-            </h2>
-          </div>
+        <div className="lg:col-span-2 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex flex-col h-full overflow-hidden">
+          <h2 className="text-lg font-bold text-white mb-4 border-b border-gray-800 pb-3">Academic Transcript</h2>
           
-          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-8">
-            {sortedSemesters.length === 0 ? (
-              <div className="text-center py-20 text-gray-500">
-                <p>No subjects added yet. Start adding courses to calculate your SGPA and CGPA.</p>
-              </div>
+          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
+            {Object.keys(groupedRecords).length === 0 ? (
+              <p className="text-gray-500 italic text-center py-10">No grades logged yet.</p>
             ) : (
-              sortedSemesters.map(semester => {
-                const semesterCourses = coursesBySemester[semester];
-                const semesterStats = calculateGPA(semesterCourses);
-                
-                return (
-                  <div key={semester} className="space-y-3">
-                    <div className="flex justify-between items-end border-b border-gray-800 pb-2">
-                      <h3 className="text-lg font-bold text-emerald-400">{semester}</h3>
-                      <div className="text-right">
-                        <span className="text-xs text-gray-400 mr-3">Credits: {semesterStats.credits}</span>
-                        <span className="text-sm font-black text-white bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-700 shadow-sm">
-                          SGPA: {semesterStats.gpa}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      {semesterCourses.map(course => (
-                        <div key={course.id} className="bg-black border border-gray-800 p-4 rounded-xl flex items-center justify-between group hover:border-gray-700 transition-colors">
-                          <div>
-                            <h4 className="text-white font-bold">{course.name}</h4>
-                            <p className="text-xs text-gray-400 mt-1">{course.credits} Credits • {gradeScale[course.grade]} Grade Points</p>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="bg-gray-900 text-emerald-400 font-black text-lg px-4 py-1.5 rounded-lg border border-gray-800 shadow-inner">
-                              {course.grade}
-                            </div>
-                            <div className="flex shrink-0 gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleEdit(course.id)} className="text-gray-500 hover:text-white bg-gray-800 p-1.5 rounded transition-colors">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                              </button>
-                              <button onClick={() => deleteCourse(course.id)} className="text-gray-500 hover:text-red-400 bg-gray-800 p-1.5 rounded transition-colors">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+              Object.entries(groupedRecords).reverse().map(([sem, courses]) => (
+                <div key={sem} className="bg-black border border-gray-800 rounded-xl p-4">
+                  <div className="flex justify-between items-center mb-3 border-b border-gray-800 pb-2">
+                    <h3 className="font-bold text-white text-sm">{sem}</h3>
+                    <span className="text-xs font-bold text-gray-500">SGPA: <span className="text-yellow-400">{calculateGPA(courses)}</span></span>
                   </div>
-                );
-              })
+                  
+                  <div className="space-y-2">
+                    {courses.map(course => (
+                      <div key={course.id} className="flex justify-between items-center p-2 rounded-lg hover:bg-gray-900 group">
+                        <div className="flex flex-col">
+                          <span className="text-gray-200 text-sm font-bold">{course.subject}</span>
+                          <span className="text-[10px] text-gray-500">{course.credits} Credits</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-yellow-400 font-black text-lg bg-yellow-900/20 px-3 py-1 rounded border border-yellow-900/50 shadow-sm">{course.grade}</span>
+                          <button onClick={() => handleDelete(course.id)} className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </div>

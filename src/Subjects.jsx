@@ -4,10 +4,7 @@ import { useLocalStorageSync } from './useLocalStorageSync';
 const SEMESTERS = Array.from({length: 10}, (_, i) => `Semester ${i + 1}`);
 
 const Subjects = ({ cloudSubjects = [], cloudActiveSemester = 'Semester 1', updateCloudData }) => {
-  // Sync arrays/objects normally
   const [subjects, setSubjects] = useLocalStorageSync('subjectsData', cloudSubjects);
-  
-  // FIX: Use standard state for strings to prevent JSON.parse() syntax crashes
   const [activeSemester, setActiveSemester] = useState(cloudActiveSemester || 'Semester 1');
 
   useEffect(() => {
@@ -31,7 +28,7 @@ const Subjects = ({ cloudSubjects = [], cloudActiveSemester = 'Semester 1', upda
 
   const handleSave = (e) => {
     e.preventDefault();
-    if (!name || !name.trim()) return; // Added safety check
+    if (!name || !name.trim()) return;
 
     let updatedSubjects;
     if (editingId) {
@@ -64,8 +61,8 @@ const Subjects = ({ cloudSubjects = [], cloudActiveSemester = 'Semester 1', upda
     setName('');
   };
 
-  // Filter subjects to only show the ones for the currently selected semester
-  const displayedSubjects = safeSubjects.filter(s => !s.semester || s.semester === activeSemester);
+  // FIX: Force legacy subjects without a semester into Semester 1
+  const displayedSubjects = safeSubjects.filter(s => (s.semester ? s.semester : 'Semester 1') === activeSemester);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500 h-full flex flex-col pb-10">

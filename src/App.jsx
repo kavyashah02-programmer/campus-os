@@ -101,7 +101,6 @@ function App() {
   const [isManagingFocusSubjects, setIsManagingFocusSubjects] = useState(false);
   const [newFocusSubject, setNewFocusSubject] = useState('');
 
-  // --- BREAK TRACKER STATE ---
   const [isOnBreak, setIsOnBreak] = useState(false);
   const [breakTimeLeft, setBreakTimeLeft] = useState(0);
   const [currentBreakSessionTime, setCurrentBreakSessionTime] = useState(0);
@@ -897,10 +896,10 @@ function App() {
 
                  {isOnBreak ? (
                    <div className="mb-8 z-10 flex flex-col items-center">
-                     <div className={`text-6xl font-black font-mono drop-shadow-md transition-colors ${breakTimeLeft === 0 ? 'text-red-500 animate-pulse' : 'text-amber-500'}`}>
+                     <div className={`text-6xl font-black font-mono drop-shadow-md transition-colors ${breakTimeLeft === 0 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
                        {formatTimer(breakTimeLeft)}
                      </div>
-                     <p className="text-[10px] font-bold text-gray-500 mt-2 uppercase tracking-widest">Break Time Remaining</p>
+                     <p className="text-[10px] font-bold text-gray-500 mt-2 uppercase tracking-widest">Urgent Break Countdown</p>
                    </div>
                  ) : (
                    <>
@@ -928,7 +927,7 @@ function App() {
                      </>
                    ) : (
                      <>
-                       <button onClick={resumeSession} className="flex-1 py-3 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg transition-colors">
+                       <button onClick={resumeSession} className={`flex-1 py-3 rounded-xl font-bold text-white shadow-lg transition-colors ${breakTimeLeft === 0 ? 'bg-red-600 hover:bg-red-500' : 'bg-indigo-600 hover:bg-indigo-500'}`}>
                          {breakTimeLeft > 0 ? 'Resume Early' : 'Resume Session'}
                        </button>
                        <button onClick={handleResetTimer} className="flex-1 py-3 rounded-xl font-bold bg-red-900/30 text-red-500 hover:bg-red-500 hover:text-white border border-red-900/50 transition-colors shadow-lg">Reset & Save</button>
@@ -974,14 +973,14 @@ function App() {
         {(() => {
            const activeSem = cloudData.activeSemester ? cloudData.activeSemester : 'Semester 1';
            const allSubjects = cloudData.subjects ? cloudData.subjects : [];
-           const currentSemSubjects = allSubjects.filter(s => !s.semester || s.semester === activeSem);
+           const currentSemSubjects = allSubjects.filter(s => (s.semester ? s.semester : 'Semester 1') === activeSem);
 
            return (
              <>
                 {currentView === 'tasks' ? <TaskManager cloudTasks={cloudData.tasks ? cloudData.tasks : []} updateCloudData={updateCloudData} /> : null}
                 {currentView === 'planner' ? <DailyPlanner cloudPlanner={cloudData.planner ? cloudData.planner : []} updateCloudData={updateCloudData} /> : null}
                 {currentView === 'habits' ? <HabitTracker habits={habits} setHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} updateCloudData={updateCloudData} /> : null}
-                {currentView === 'cgpa' ? <CGPACalculator cloudCGPA={cloudData.cgpa ? cloudData.cgpa : []} cloudSubjects={currentSemSubjects} updateCloudData={updateCloudData} /> : null}        
+                {currentView === 'cgpa' ? <CGPACalculator cloudCGPA={cloudData.cgpa ? cloudData.cgpa : []} cloudSubjects={currentSemSubjects} activeSemester={activeSem} updateCloudData={updateCloudData} /> : null}        
                 {currentView === 'exams' ? <ExamTracker cloudExams={cloudData.exams ? cloudData.exams : []} cloudPlanner={cloudData.planner ? cloudData.planner : []} cloudSubjects={currentSemSubjects} updateCloudData={updateCloudData} /> : null}
                 {currentView === 'fitness' ? <FitnessTracker cloudFitness={cloudData.fitness ? cloudData.fitness : {}} updateCloudData={updateCloudData} /> : null}
                 {currentView === 'finance' ? <FinanceTracker cloudFinance={cloudData.finance ? cloudData.finance : {}} updateCloudData={updateCloudData} /> : null}
