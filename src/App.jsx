@@ -443,15 +443,18 @@ function App() {
     });
     
     Object.entries(attRecords).forEach(([keyString, status]) => {
+      // Strictly exclude 'C' (Holiday / Cancelled) from the attendance denominator
+      if (!['P', 'A'].includes(status)) return;
+
       const parts = keyString.split('_');
       if (parts.length < 2) return;
-      
+
       const schedId = parts[1];
       const schedule = attSchedules.find(s => s.id === schedId);
-      
+
       if (schedule) {
         const keyStr = schedule.classType ? `(${schedule.classType})` : '';
-        const key = `${schedule.subject} ${keyStr}`;
+        const key = `${schedule.subject} ${keyStr}`.trim();
         if (!attStats[key]) attStats[key] = { P: 0, total: 0 };
         attStats[key].total++;
         if (status === 'P') attStats[key].P++;
@@ -980,14 +983,29 @@ function App() {
                 {currentView === 'tasks' ? <TaskManager cloudTasks={cloudData.tasks ? cloudData.tasks : []} updateCloudData={updateCloudData} /> : null}
                 {currentView === 'planner' ? <DailyPlanner cloudPlanner={cloudData.planner ? cloudData.planner : []} updateCloudData={updateCloudData} /> : null}
                 {currentView === 'habits' ? <HabitTracker habits={habits} setHabits={setHabits} habitLogs={habitLogs} setHabitLogs={setHabitLogs} updateCloudData={updateCloudData} /> : null}
-                {currentView === 'cgpa' ? <CGPACalculator cloudCGPA={cloudData.cgpa ? cloudData.cgpa : []} cloudSubjects={currentSemSubjects} activeSemester={activeSem} updateCloudData={updateCloudData} /> : null}        
+                {currentView === 'cgpa' ? (
+                  <CGPACalculator
+                    cloudCGPA={cloudData.cgpa ? cloudData.cgpa : []}
+                    cloudSubjects={currentSemSubjects}
+                    activeSemester={activeSem}
+                    cloudGradingSystem={cloudData.gradingSystem ? cloudData.gradingSystem : null}
+                    updateCloudData={updateCloudData}
+                  />
+                ) : null}
                 {currentView === 'exams' ? <ExamTracker cloudExams={cloudData.exams ? cloudData.exams : []} cloudPlanner={cloudData.planner ? cloudData.planner : []} cloudSubjects={currentSemSubjects} updateCloudData={updateCloudData} /> : null}
                 {currentView === 'fitness' ? <FitnessTracker cloudFitness={cloudData.fitness ? cloudData.fitness : {}} updateCloudData={updateCloudData} /> : null}
                 {currentView === 'finance' ? <FinanceTracker cloudFinance={cloudData.finance ? cloudData.finance : {}} updateCloudData={updateCloudData} /> : null}
                 {currentView === 'rewards' ? <RewardSystem cloudRewards={cloudData.rewards ? cloudData.rewards : {}} updateCloudData={updateCloudData} habits={habits} /> : null}
                 {currentView === 'library' ? <Library cloudLibrary={cloudData.library ? cloudData.library : []} updateCloudData={updateCloudData} /> : null}
                 {currentView === 'donate' ? <AnimalDonation cloudDonations={cloudData.donations ? cloudData.donations : []} updateCloudData={updateCloudData} /> : null}
-                {currentView === 'subjects' ? <Subjects cloudSubjects={allSubjects} cloudActiveSemester={activeSem} updateCloudData={updateCloudData} /> : null}
+                {currentView === 'subjects' ? (
+                  <Subjects
+                    cloudSubjects={allSubjects}
+                    cloudActiveSemester={activeSem}
+                    cloudGradingSystem={cloudData.gradingSystem ? cloudData.gradingSystem : null}
+                    updateCloudData={updateCloudData}
+                  />
+                ) : null}
                 {currentView === 'attendance' ? <Attendance cloudAttendance={cloudData.attendance ? cloudData.attendance : {}} cloudSubjects={currentSemSubjects} updateCloudData={updateCloudData} /> : null}
                 {currentView === 'bucketlist' ? <BucketList cloudBucketList={cloudData.bucketList ? cloudData.bucketList : []} updateCloudData={updateCloudData} /> : null}
                 {currentView === 'laundry' ? (
