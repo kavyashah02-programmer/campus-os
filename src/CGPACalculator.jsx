@@ -1,6 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { useLocalStorageSync } from './useLocalStorageSync';
-import { DEFAULT_GRADING_SYSTEM } from './Subjects';
+
+const FALLBACK_GRADING_SYSTEM = [
+  { grade: 'A', points: 10 },
+  { grade: 'A-', points: 9 },
+  { grade: 'B', points: 8 },
+  { grade: 'B-', points: 7 },
+  { grade: 'C', points: 6 },
+  { grade: 'C-', points: 5 },
+  { grade: 'D', points: 4 },
+  { grade: 'E', points: 2 },
+  { grade: 'NC', points: 0 }
+];
+
+// Read-time adapter: resolves course names across both new ('subject') and legacy field names
+const getCourseName = (record) => {
+  if (!record) return '';
+  const raw =
+    record.subject ??
+    record.name ??
+    record.subjectName ??
+    record.courseName ??
+    record.course ??
+    record.title ??
+    '';
+  return String(raw).trim();
+};
+
+// Normalize strings for case/whitespace-insensitive matching between Master Subjects and Transcript
+const normalizeKey = (str) => String(str ?? '').trim().toLowerCase();
+
+// Normalize legacy semester formats (e.g. undefined, 1, "1", "Semester 1") -> "Semester 1"
+const normalizeSemester = (sem) => {
+  if (!sem) return 'Semester 1';
+  const trimmed = String(sem).trim();
+  return /^\d+$/.test(trimmed) ? `Semester ${trimmed}` : trimmed;
+};
 
 const CGPACalculator = ({
   cloudCGPA = [],
@@ -17,15 +52,16 @@ const CGPACalculator = ({
 
   const safeRecords = Array.isArray(records) ? records : [];
   const safeSubjects = Array.isArray(cloudSubjects) ? cloudSubjects : [];
+  const normalizedActiveSem = normalizeSemester(activeSemester);
 
-  // Pull dynamic grading system sorted descending by points
+  // Copy before sorting so React props/state are never mutated in place
   const gradingScale = (
     Array.isArray(cloudGradingSystem) && cloudGradingSystem.length > 0
       ? [...cloudGradingSystem]
-      : [...DEFAULT_GRADING_SYSTEM]
-  ).sort((a, b) => b.points - a.points);
+      : [...FALLBACK_GRADING_SYSTEM]
+  ).sort((a, b) => Number(b.points) - Number(a.points));
 
-  // Build O(1) grade-to-points lookup map
+  // O(1) lookup table mapping grade labels -> numeric points
   const gradePointMap = gradingScale.reduce((acc, item) => {
     acc[item.grade] = Number(item.points);
     return acc;
@@ -35,18 +71,49 @@ const CGPACalculator = ({
   const [grade, setGrade] = useState(gradingScale[0] ? gradingScale[0].grade : 'A');
   const [targetCGPA, setTargetCGPA] = useState('');
 
-  // Ensure selected grade stays valid if grading scale changes
+  // Keep selected grade valid if the user edits the grading scale in Master Subjects
   useEffect(() => {
     if (gradingScale.length > 0 && gradePointMap[grade] === undefined) {
       setGrade(gradingScale[0].grade);
     }
   }, [gradingScale, grade, gradePointMap]);
 
-  // Automatically fetch credits from Master Subjects
-  const selectedSubjectObj = safeSubjects.find(s => s.name === subject);
-  const autoCredits = selectedSubjectObj
-    ? (selectedSubjectObj.credits !== undefined ? Number(selectedSubjectObj.credits) : 3)
-    : null;
+  // Filter transcript records belonging to the active semester
+  const currentSemesterRecords = safeRecords.filter(
+    r => normalizeSemester(r.semester) === normalizedActiveSem
+  );
+
+  // Build an O(1) Set of normalized subject names already logged in the active semester
+  const loggedSubjectKeys = new Set(
+    currentSemesterRecords
+      .map(r => normalizeKey(getCourseName(r)))
+      .filter(key => key.length > 0)
+  );
+
+  // Count legacy records in the active semester that have no course name saved at all
+  const unnamedActiveSemCount = currentSemesterRecords.filter(
+    r => getCourseName(r).length === 0
+  ).length;
+
+  // Strictly remaining (unlogged) courses for the active semester
+  const remainingSubjects = safeSubjects
+    .filter(s => !loggedSubjectKeys.has(normalizeKey(s.name)))
+    .map(s => ({
+      id: s.id,
+      name: s.name,
+      credits: s.credits !== undefined ? Number(s.credits) : 3
+    }));
+
+  // Reset dropdown selection if the currently chosen subject gets logged
+  useEffect(() => {
+    if (subject && loggedSubjectKeys.has(normalizeKey(subject))) {
+      setSubject('');
+    }
+  }, [subject, loggedSubjectKeys]);
+
+  // Automatically fetch credits from Master Subjects for the chosen course
+  const selectedSubjectObj = remainingSubjects.find(s => s.name === subject);
+  const autoCredits = selectedSubjectObj ? selectedSubjectObj.credits : null;
 
   const handleAddRecord = (e) => {
     e.preventDefault();
@@ -54,10 +121,10 @@ const CGPACalculator = ({
 
     const newRecord = {
       id: Date.now().toString(),
-      subject,
+      subject: subject.trim(),
       credits: autoCredits,
       grade,
-      semester: activeSemester
+      semester: normalizedActiveSem
     };
 
     const updated = [...safeRecords, newRecord];
@@ -65,6 +132,24 @@ const CGPACalculator = ({
     if (updateCloudData) updateCloudData('cgpa', updated);
 
     setSubject('');
+  };
+
+  // Assign a Master Subject name to an unnamed legacy transcript row without losing its grade
+  const handleAssignLegacySubject = (recordId, chosenSubjectName) => {
+    if (!chosenSubjectName) return;
+    const matchedSubj = safeSubjects.find(s => s.name === chosenSubjectName);
+    const updated = safeRecords.map(r => {
+      if (r.id !== recordId) return r;
+      return {
+        ...r,
+        subject: chosenSubjectName,
+        credits: matchedSubj && matchedSubj.credits !== undefined
+          ? Number(matchedSubj.credits)
+          : r.credits
+      };
+    });
+    setRecords(updated);
+    if (updateCloudData) updateCloudData('cgpa', updated);
   };
 
   const handleDelete = (id) => {
@@ -92,38 +177,24 @@ const CGPACalculator = ({
   };
 
   const cgpa = calculateGPA(safeRecords);
-  const currentSemesterRecords = safeRecords.filter(
-    r => (r.semester ? r.semester : 'Semester 1') === activeSemester
-  );
   const sgpa = calculateGPA(currentSemesterRecords);
 
   const groupedRecords = safeRecords.reduce((acc, curr) => {
-    const sem = curr.semester ? curr.semester : 'Semester 1';
+    const sem = normalizeSemester(curr.semester);
     if (!acc[sem]) acc[sem] = [];
     acc[sem].push(curr);
     return acc;
   }, {});
 
-  // --- TARGET CGPA SOLVER (Floor-and-Step Greedy Algorithm) ---
+  // --- TARGET CGPA SOLVER (Operates strictly on unlogged remainingSubjects) ---
   const computeTargetPlan = () => {
     const T = Number(targetCGPA);
     if (targetCGPA === '' || isNaN(T) || T <= 0) return null;
-
-    // 1. Identify unlogged subjects remaining in the active semester
-    const loggedInActiveSem = new Set(currentSemesterRecords.map(r => r.subject));
-    const remainingSubjects = safeSubjects
-      .filter(s => !loggedInActiveSem.has(s.name))
-      .map(s => ({
-        id: s.id,
-        name: s.name,
-        credits: s.credits !== undefined ? Number(s.credits) : 3
-      }));
 
     if (remainingSubjects.length === 0) {
       return { status: 'no_remaining' };
     }
 
-    // 2. Calculate earned totals (all semesters) and remaining credits
     let earnedPoints = 0;
     let earnedCredits = 0;
     safeRecords.forEach(r => {
@@ -137,8 +208,7 @@ const CGPACalculator = ({
     const neededPoints = T * totalFutureCredits - earnedPoints;
     const requiredGPA = neededPoints / remCredits;
 
-    // Ascending order of grades (lowest -> highest) for step-up traversal
-    const ascendingGrades = [...gradingScale].sort((a, b) => a.points - b.points);
+    const ascendingGrades = [...gradingScale].sort((a, b) => Number(a.points) - Number(b.points));
     const minGrade = ascendingGrades[0];
     const maxGrade = ascendingGrades[ascendingGrades.length - 1];
 
@@ -162,11 +232,10 @@ const CGPACalculator = ({
       };
     }
 
-    // Minimum uniform grade: lowest grade with points >= requiredGPA
     const uniformGrade =
-      ascendingGrades.find(g => g.points >= requiredGPA - 1e-9) || maxGrade;
+      ascendingGrades.find(g => g.points >= requiredGPA - 1e-9) ?? maxGrade;
 
-    // Floor grade index: highest grade with points <= requiredGPA
+    // Start all remaining courses at the highest grade <= requiredGPA
     let floorIdx = 0;
     for (let i = 0; i < ascendingGrades.length; i++) {
       if (ascendingGrades[i].points <= requiredGPA + 1e-9) {
@@ -174,7 +243,6 @@ const CGPACalculator = ({
       }
     }
 
-    // Initialize every remaining subject at the floor grade
     const assignment = remainingSubjects.map(s => ({
       ...s,
       gradeIdx: floorIdx
@@ -183,13 +251,11 @@ const CGPACalculator = ({
     const getPlanPoints = () =>
       assignment.reduce((sum, item) => sum + item.credits * ascendingGrades[item.gradeIdx].points, 0);
 
-    // Step up one grade at a time until neededPoints is met, minimizing overshoot & peak grade
+    // Greedily bump the lowest-grade courses one tier at a time until neededPoints is met
     let safetyCounter = 0;
     while (getPlanPoints() < neededPoints - 1e-9 && safetyCounter < 500) {
       safetyCounter++;
       const deficit = neededPoints - getPlanPoints();
-
-      // Restrict candidates to subjects currently at the lowest gradeIdx to keep max grade minimal
       const minCurrentIdx = Math.min(...assignment.map(a => a.gradeIdx));
       const candidates = assignment
         .map((item, idx) => ({ item, idx }))
@@ -198,15 +264,15 @@ const CGPACalculator = ({
       if (candidates.length === 0) break;
 
       const deltaPts = ascendingGrades[minCurrentIdx + 1].points - ascendingGrades[minCurrentIdx].points;
-
-      // Check if a single upgrade clears the deficit; if so, pick the one with minimal overshoot
       const clearing = candidates.filter(({ item }) => item.credits * deltaPts >= deficit - 1e-9);
+
       let chosenIdx;
       if (clearing.length > 0) {
+        // Minimize overshoot when a single upgrade closes the gap
         clearing.sort((a, b) => a.item.credits - b.item.credits);
         chosenIdx = clearing[0].idx;
       } else {
-        // Otherwise upgrade the highest-credit subject to close the gap fastest
+        // Close the gap fastest when multiple upgrades are still needed
         candidates.sort((a, b) => b.item.credits - a.item.credits);
         chosenIdx = candidates[0].idx;
       }
@@ -214,8 +280,7 @@ const CGPACalculator = ({
       assignment[chosenIdx].gradeIdx += 1;
     }
 
-    const projectedPoints = earnedPoints + getPlanPoints();
-    const projectedCGPA = projectedPoints / totalFutureCredits;
+    const projectedCGPA = (earnedPoints + getPlanPoints()) / totalFutureCredits;
 
     return {
       status: 'achievable',
@@ -234,21 +299,22 @@ const CGPACalculator = ({
   const targetPlan = computeTargetPlan();
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 h-full flex flex-col pb-10">
-      <header className="bg-[#121212] rounded-2xl border border-gray-800 p-5 shadow-lg flex justify-between items-center shrink-0">
+    /* FIX: Removed 'h-full' so expanding the Target Simulator never squashes the Transcript below */
+    <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 pb-12">
+      <header className="bg-[#121212] rounded-2xl border border-gray-800 p-5 shadow-lg flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight">CGPA Calculator</h1>
           <p className="text-gray-400 text-sm mt-0.5">Synced with your Master Subjects credits and custom grading scale.</p>
         </div>
         <div className="text-right">
           <span className="text-[10px] bg-gray-900 border border-gray-800 text-gray-400 px-2 py-1 rounded uppercase tracking-wider font-bold">
-            Active: {activeSemester}
+            Active: {normalizedActiveSem}
           </span>
         </div>
       </header>
 
       {/* TOP STATS + TARGET PLANNER */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 shrink-0">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex flex-col items-center justify-center text-center">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Overall CGPA</p>
           <div className={`text-6xl font-black font-mono drop-shadow-md ${Number(cgpa) >= 8.5 ? 'text-emerald-400' : Number(cgpa) >= 7.0 ? 'text-blue-400' : 'text-yellow-400'}`}>
@@ -259,12 +325,13 @@ const CGPACalculator = ({
 
         <div className="bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex flex-col items-center justify-center text-center relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500"></div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Current SGPA ({activeSemester})</p>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Current SGPA ({normalizedActiveSem})</p>
           <div className="text-5xl font-black text-white font-mono drop-shadow-md">{sgpa}</div>
-          <p className="text-[10px] text-gray-500 mt-3">{currentSemesterRecords.length} course(s) logged</p>
+          <p className="text-[10px] text-gray-500 mt-3">
+            {currentSemesterRecords.length} logged • {remainingSubjects.length} remaining
+          </p>
         </div>
 
-        {/* TARGET CGPA INPUT CARD */}
         <div className="bg-[#121212] rounded-2xl border border-indigo-900/50 p-6 shadow-lg flex flex-col justify-center">
           <label className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 block">
             🎯 Target CGPA Simulator
@@ -280,7 +347,7 @@ const CGPACalculator = ({
             className="w-full bg-black border border-gray-700 text-white font-mono font-bold text-xl rounded-xl px-4 py-2.5 focus:border-indigo-500 outline-none text-center"
           />
           <p className="text-[10px] text-gray-500 mt-2 text-center">
-            Calculates least required grades for unlogged {activeSemester} courses.
+            Shows minimum grades only for the {remainingSubjects.length} unlogged course(s).
           </p>
         </div>
       </div>
@@ -288,13 +355,19 @@ const CGPACalculator = ({
       {/* TARGET CGPA RESULT BANNER */}
       {targetPlan ? (
         <div className="bg-[#121212] rounded-2xl border border-indigo-500/40 p-6 shadow-lg space-y-4">
+          {unnamedActiveSemCount > 0 ? (
+            <div className="bg-amber-900/20 border border-amber-500/40 rounded-xl px-4 py-2.5 text-xs text-amber-300">
+              Note: {unnamedActiveSemCount} older record(s) in {normalizedActiveSem} have no subject name saved. Link them in the Academic Transcript below so they are excluded from remaining courses.
+            </div>
+          ) : null}
+
           {targetPlan.status === 'no_remaining' ? (
             <p className="text-sm text-gray-400">
-              All subjects for <span className="text-white font-bold">{activeSemester}</span> are already logged. Add upcoming subjects in Master Subjects to calculate required grades.
+              All subjects for <span className="text-white font-bold">{normalizedActiveSem}</span> already have grades logged.
             </p>
           ) : targetPlan.status === 'unreachable' ? (
             <div className="text-red-400 text-sm font-medium">
-              Target CGPA of <span className="font-bold text-white">{targetCGPA}</span> is mathematically unreachable this semester (requires <span className="font-bold">{targetPlan.requiredGPA.toFixed(2)}</span> SGPA, exceeding max grade {targetPlan.maxGrade.grade} = {targetPlan.maxGrade.points}). Maximum achievable CGPA this semester is <span className="font-bold text-white">{targetPlan.maxAchievableCGPA.toFixed(2)}</span>.
+              Target CGPA of <span className="font-bold text-white">{targetCGPA}</span> is unreachable with your {remainingSubjects.length} remaining course(s) (requires <span className="font-bold">{targetPlan.requiredGPA.toFixed(2)}</span> SGPA, above max grade {targetPlan.maxGrade.grade} = {targetPlan.maxGrade.points}). Maximum achievable CGPA is <span className="font-bold text-white">{targetPlan.maxAchievableCGPA.toFixed(2)}</span>.
             </div>
           ) : (
             <>
@@ -303,10 +376,10 @@ const CGPACalculator = ({
                   <h3 className="text-white font-bold text-base">
                     {targetPlan.status === 'secured'
                       ? `Target CGPA (${targetCGPA}) Already Secured!`
-                      : `Least Possible Path to ${targetCGPA} CGPA`}
+                      : `Least Possible Grades for Remaining ${remainingSubjects.length} Course(s)`}
                   </h3>
                   <p className="text-xs text-gray-400 mt-1">
-                    Minimum Required SGPA on remaining courses:{' '}
+                    Required SGPA on remaining courses:{' '}
                     <span className="text-indigo-400 font-bold">{targetPlan.requiredGPA.toFixed(2)}</span>
                     {targetPlan.projectedCGPA ? (
                       <>
@@ -325,33 +398,29 @@ const CGPACalculator = ({
                 </div>
               </div>
 
-              <div>
-                <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-3">
-                  Optimized Least Grade Combination (Remaining {activeSemester} Subjects)
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {targetPlan.plan.map(item => (
-                    <div
-                      key={item.id}
-                      className="bg-black border border-gray-800 rounded-xl p-3 flex justify-between items-center"
-                    >
-                      <div className="truncate pr-2">
-                        <p className="text-white font-bold text-xs truncate">{item.name}</p>
-                        <p className="text-[10px] text-gray-500">{item.credits} Credits</p>
-                      </div>
-                      <span className="text-sm font-black text-emerald-400 bg-emerald-900/20 border border-emerald-900/50 px-2.5 py-1 rounded-lg shrink-0">
-                        {item.assigned.grade}
-                      </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {targetPlan.plan.map(item => (
+                  <div
+                    key={item.id}
+                    className="bg-black border border-gray-800 rounded-xl p-3 flex justify-between items-center"
+                  >
+                    <div className="truncate pr-2">
+                      <p className="text-white font-bold text-xs truncate">{item.name}</p>
+                      <p className="text-[10px] text-gray-500">{item.credits} Credits</p>
                     </div>
-                  ))}
-                </div>
+                    <span className="text-sm font-black text-emerald-400 bg-emerald-900/20 border border-emerald-900/50 px-2.5 py-1 rounded-lg shrink-0">
+                      {item.assigned.grade}
+                    </span>
+                  </div>
+                ))}
               </div>
             </>
           )}
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
+      {/* FIX: Removed 'flex-1 overflow-hidden' so Transcript stays fully visible and never collapses */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* LOG A GRADE FORM */}
         <div className="lg:col-span-1 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg h-fit">
           <h2 className="text-lg font-bold text-white mb-6 border-b border-gray-800 pb-3 flex items-center gap-2">
@@ -363,7 +432,7 @@ const CGPACalculator = ({
           <form onSubmit={handleAddRecord} className="space-y-4">
             <div>
               <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">
-                Subject ({activeSemester})
+                Remaining Subjects ({normalizedActiveSem})
               </label>
               <select
                 required
@@ -371,13 +440,12 @@ const CGPACalculator = ({
                 onChange={e => setSubject(e.target.value)}
                 className="w-full bg-black border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:border-yellow-500 outline-none transition-colors"
               >
-                <option value="" disabled>Select Subject...</option>
-                {safeSubjects.length === 0 ? (
-                  <option value="" disabled>Add subjects in Master Subjects first</option>
-                ) : null}
-                {safeSubjects.map(s => (
+                <option value="" disabled>
+                  {remainingSubjects.length === 0 ? 'All subjects logged' : 'Select unlogged subject...'}
+                </option>
+                {remainingSubjects.map(s => (
                   <option key={s.id} value={s.name}>
-                    {s.name} ({s.credits !== undefined ? s.credits : 3} cr)
+                    {s.name} ({s.credits} cr)
                   </option>
                 ))}
               </select>
@@ -412,7 +480,8 @@ const CGPACalculator = ({
 
             <button
               type="submit"
-              className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-black py-3 rounded-xl shadow-[0_0_15px_rgba(202,138,4,0.3)] transition-colors mt-4"
+              disabled={remainingSubjects.length === 0}
+              className="w-full bg-yellow-600 hover:bg-yellow-500 disabled:bg-gray-800 disabled:text-gray-600 text-black font-black py-3 rounded-xl shadow-[0_0_15px_rgba(202,138,4,0.3)] transition-colors mt-4"
             >
               Add to Transcript
             </button>
@@ -420,10 +489,10 @@ const CGPACalculator = ({
         </div>
 
         {/* ACADEMIC TRANSCRIPT */}
-        <div className="lg:col-span-2 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex flex-col h-full overflow-hidden">
+        <div className="lg:col-span-2 bg-[#121212] rounded-2xl border border-gray-800 p-6 shadow-lg flex flex-col">
           <h2 className="text-lg font-bold text-white mb-4 border-b border-gray-800 pb-3">Academic Transcript</h2>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
+          <div className="max-h-[540px] overflow-y-auto custom-scrollbar pr-2 space-y-6">
             {Object.keys(groupedRecords).length === 0 ? (
               <p className="text-gray-500 italic text-center py-10">No grades logged yet.</p>
             ) : (
@@ -437,27 +506,51 @@ const CGPACalculator = ({
                   </div>
 
                   <div className="space-y-2">
-                    {courses.map(course => (
-                      <div key={course.id} className="flex justify-between items-center p-2 rounded-lg hover:bg-gray-900 group">
-                        <div className="flex flex-col">
-                          <span className="text-gray-200 text-sm font-bold">{course.subject}</span>
-                          <span className="text-[10px] text-gray-500">{course.credits} Credits</span>
+                    {courses.map(course => {
+                      const resolvedName = getCourseName(course);
+                      return (
+                        <div key={course.id} className="flex justify-between items-center p-2.5 rounded-lg hover:bg-gray-900 group gap-3">
+                          <div className="flex flex-col flex-1 min-w-0">
+                            {resolvedName ? (
+                              <span className="text-white text-sm font-bold truncate">{resolvedName}</span>
+                            ) : (
+                              /* Fallback linker if an older record had no subject name stored in Firebase */
+                              <div className="flex flex-wrap items-center gap-2 mb-1">
+                                <span className="text-amber-400 text-xs font-bold">Unassigned Course</span>
+                                {remainingSubjects.length > 0 && sem === normalizedActiveSem ? (
+                                  <select
+                                    defaultValue=""
+                                    onChange={(e) => handleAssignLegacySubject(course.id, e.target.value)}
+                                    className="bg-[#121212] border border-amber-500/40 text-gray-200 text-[11px] rounded-md px-2 py-0.5 outline-none focus:border-amber-400"
+                                  >
+                                    <option value="" disabled>Link subject...</option>
+                                    {remainingSubjects.map(s => (
+                                      <option key={s.id} value={s.name}>{s.name}</option>
+                                    ))}
+                                  </select>
+                                ) : null}
+                              </div>
+                            )}
+                            <span className="text-[11px] text-gray-500">{course.credits} Credits</span>
+                          </div>
+
+                          <div className="flex items-center gap-4 shrink-0">
+                            <span className="text-yellow-400 font-black text-lg bg-yellow-900/20 px-3 py-1 rounded border border-yellow-900/50 shadow-sm">
+                              {course.grade}
+                            </span>
+                            <button
+                              onClick={() => handleDelete(course.id)}
+                              title="Delete Record"
+                              className="text-gray-500 hover:text-red-500 opacity-60 group-hover:opacity-100 transition-opacity p-1"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                          <span className="text-yellow-400 font-black text-lg bg-yellow-900/20 px-3 py-1 rounded border border-yellow-900/50 shadow-sm">
-                            {course.grade}
-                          </span>
-                          <button
-                            onClick={() => handleDelete(course.id)}
-                            className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ))
